@@ -1,0 +1,36 @@
+* root window properties
+  - [ ] _NET_SUPPORTED
+  - [ ] _NET_CLIENT_LIST
+  - [X] _NET_NUMBER_OF_DESKTOPS
+  - [ ] _NET_DESKTOP_GEOMETRY
+  - [X] _NET_DESKTOP_VIEWPORT
+  - [X] _NET_CURRENT_DESKTOP
+  - [ ] _NET_DESKTOP_NAMES
+  - [-] _NET_ACTIVE_WINDOW
+    - [X] Set when focussing a window
+    - [ ] Set to None if no window is focussed
+    - [ ] Process client message to select other window
+  - [ ] _NET_WORKAREA
+  - [X] _NET_SUPPORTING_WM_CHECK
+  - [ ] _NET_VIRTUAL_ROOTS
+  - [ ] _NET_SHOWING_DESKTOP
+* root window messages
+  - [ ] _NET_CLOSE_WINDOW
+  - [ ] _NET_MOVERESIZE_WINDOW
+  - [ ] _NET_WM_MOVERESIZE
+  - [ ] _NET_RESTACK_WINDOW
+  - [ ] _NET_REQUEST_FRAME_EXTENTS
+* application window properties
+  - [ ] _NET_WM_DESKTOP
+  - [ ] _NET_WM_WINDOW_TYPE
+  - [ ] _NET_WM_STATE
+  - [ ] _NET_WM_ALLOWED_ACTIONS
+  - [ ] _NET_WM_STRUT_PARTIAL
+  - [ ] _NET_FRAME_EXTENTS
+* window manager protocols
+  - [ ] _NET_WM_PING
+  - [ ] _NET_WM_SYNC_REQUEST
+  - [ ] _NET_WM_FULLSCREEN_MONITORS
+* other properties
+  - [ ] _NET_WM_FULL_PLACEMENT
+  - [ ]
