@@ -71,16 +71,22 @@ type Screen struct {
 type corner int
 
 const (
-	cornerNW = iota
-	cornerNE
-	cornerSE
-	cornerSW
+	cornerNone = 0
+	cornerN    = 1
+	cornerW    = 2
+	cornerS    = 4
+	cornerE    = 8
+
+	cornerNW = cornerN | cornerW
+	cornerNE = cornerN | cornerE
+	cornerSW = cornerS | cornerW
+	cornerSE = cornerS | cornerE
 )
 
 type drag struct {
 	startX, startY   int
 	offsetX, offsetY int
-	handle           corner
+	corner           corner
 }
 
 type Layer int
@@ -178,7 +184,7 @@ func (w *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) 
 	// should(err)
 	// x, y := rect.X(), rect.Y()
 	// w.curDrag = drag{x, y, rootX, rootY, 0}
-	w.curDrag = drag{w.Geom.X, w.Geom.Y, rootX, rootY, 0}
+	w.curDrag = drag{w.Geom.X, w.Geom.Y, rootX, rootY, cornerNone}
 	w.Raise()
 	return true, w.wm.Cursors["fleur"]
 }
@@ -202,17 +208,71 @@ func (w *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 		w.Geom.Y += snapcalc(w.Geom.Y, w.Geom.Y+w.Geom.Height+w.BorderWidth*2,
 			screen.Y(), screen.Y()+screen.Height(), w.wm.Config.Snapdist)
 	}
-	w.move(w.Geom.X, w.Geom.Y)
+	w.move()
 }
 
 func (w *Window) MoveEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 }
 
 func (w *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
-	return false, 0
+	if eventX < 0 {
+		eventX = 0
+	}
+	if eventY < 0 {
+		eventY = 0
+	}
+
+	var (
+		corner           corner
+		x, y             int
+		cursorX, cursorY string
+	)
+
+	if eventX > w.Geom.Width/2 {
+		corner |= cornerE
+		cursorX = "right"
+		x = w.Geom.Width
+	} else {
+		corner |= cornerW
+		cursorX = "left"
+	}
+
+	if eventY > w.Geom.Height/2 {
+		corner |= cornerS
+		cursorY = "bottom"
+		y = w.Geom.Height
+	} else {
+		corner |= cornerN
+		cursorY = "top"
+	}
+
+	w.curDrag = drag{w.Geom.X, w.Geom.Y, rootX, rootY, corner}
+	xproto.WarpPointer(w.wm.X.Conn(), xproto.WindowNone, w.Id, 0, 0, 0, 0, int16(x), int16(y))
+	return true, w.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
 }
 
-func (w *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {}
+func (w *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	// FIXME consider size hints
+	if (w.curDrag.corner & cornerW) > 0 {
+		w.Geom.Width += w.Geom.X - rootX + w.wm.Config.BorderWidth
+		w.Geom.X = rootX - w.wm.Config.BorderWidth
+	}
+
+	if (w.curDrag.corner & cornerE) > 0 {
+		w.Geom.Width += rootX - (w.Geom.X + w.Geom.Width + w.wm.Config.BorderWidth)
+	}
+
+	if (w.curDrag.corner & cornerS) > 0 {
+		w.Geom.Height += rootY - (w.Geom.Y + w.Geom.Height + w.wm.Config.BorderWidth)
+	}
+
+	if (w.curDrag.corner & cornerN) > 0 {
+		w.Geom.Height += w.Geom.Y - rootY + w.wm.Config.BorderWidth
+		w.Geom.Y = rootY - w.wm.Config.BorderWidth
+	}
+
+	w.moveAndResize()
+}
 
 func (w *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 }
@@ -220,10 +280,25 @@ func (w *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) 
 func (w *Window) Move(x, y int) {
 	w.Geom.X = x
 	w.Geom.Y = y
-	w.move(x, y)
+	w.move()
 }
-func (w *Window) move(x, y int) {
-	w.Window.Move(x, y)
+
+func (w *Window) MoveAndResize(x, y, width, height int) {
+	w.Geom.X = x
+	w.Geom.Y = y
+	w.Geom.Width = width
+	w.Geom.Height = height
+	w.moveAndResize()
+}
+
+// move moves the window based on its current Geom.
+func (w *Window) move() {
+	w.Window.Move(w.Geom.X, w.Geom.Y)
+}
+
+// moveAndResize moves and resizes the window based on its current Geom.
+func (w *Window) moveAndResize() {
+	w.Window.MoveResize(w.Geom.X, w.Geom.Y, w.Geom.Width, w.Geom.Height)
 }
 
 func (w *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
@@ -298,7 +373,7 @@ func (w *Window) Init() {
 	w.SetBorderColor(w.wm.Config.BorderColor)
 
 	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-1", true, w.MoveBegin, w.MoveStep, w.MoveEnd)
-	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-3", true, w.ResizeBegin, w.ResizeStep, w.ResizeEnd)
+	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-2", true, w.ResizeBegin, w.ResizeStep, w.ResizeEnd)
 	should(mousebind.ButtonPressFun(w.OnLower).Connect(w.wm.X, w.Id, "Mod1-3", false, true))
 	xevent.UnmapNotifyFun(w.UnmapNotify).Connect(w.wm.X, w.Id)
 	xevent.DestroyNotifyFun(w.DestroyNotify).Connect(w.wm.X, w.Id)
@@ -510,23 +585,36 @@ func (w *Window) Center() (x, y int) {
 func (w *Window) Screen() xrect.Rect {
 	screens := w.wm.Screens()
 	cx, cy := w.Center()
-	for _, screen := range screens {
+	var screen xrect.Rect
+	for _, screen = range screens {
 		if (cx >= screen.X() && cx <= screen.X()+screen.Width()) &&
 			(cy >= screen.Y() && cy <= screen.Y()+screen.Height()) {
 			return screen
 		}
 	}
-	// Can this happen?
-	return nil
+
+	return screen
+}
+
+func (wm *WM) LoadCursors(mapping map[string]uint16) {
+	var err error
+	for name, cursor := range mapping {
+		wm.Cursors[name], err = xcursor.CreateCursor(wm.X, cursor)
+		must(err)
+	}
 }
 
 func (wm *WM) Init(xu *xgbutil.XUtil) {
 	var err error
 	wm.X = xu
-	wm.Cursors["fleur"], err = xcursor.CreateCursor(wm.X, xcursor.Fleur)
-	must(err)
-	wm.Cursors["normal"], err = xcursor.CreateCursor(wm.X, xcursor.LeftPtr)
-	must(err)
+	wm.LoadCursors(map[string]uint16{
+		"fleur":               xcursor.Fleur,
+		"normal":              xcursor.LeftPtr,
+		"top_left_corner":     xcursor.TopLeftCorner,
+		"top_right_corner":    xcursor.TopRightCorner,
+		"bottom_left_corner":  xcursor.BottomLeftCorner,
+		"bottom_right_corner": xcursor.BottomRightCorner,
+	})
 
 	mousebind.Initialize(wm.X)
 
