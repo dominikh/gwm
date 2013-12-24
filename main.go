@@ -65,6 +65,29 @@ func subtractGaps(sc xrect.Rect, gap Gap) xrect.Rect {
 	return out
 }
 
+func snapcalc(n0, n1, e0, e1, snapdist int) int {
+	var s0, s1 int
+
+	if abs(e0-n0) <= snapdist {
+		s0 = e0 - n0
+	}
+
+	if abs(e1-n1) <= snapdist {
+		s1 = e1 - n1
+	}
+
+	if s0 != 0 && s1 != 0 && abs(s0) < abs(s1) {
+		return s0
+	}
+	if s0 != 0 {
+		return s0
+	}
+	if s1 != 0 {
+		return s1
+	}
+	return 0
+}
+
 type Screen struct {
 }
 
@@ -116,9 +139,9 @@ type Window struct {
 }
 
 func (w *Window) Name() string {
-	name, err := ewmh.WmNameGet(w.X, w.Id)
+	name, err := ewmh.WmNameGet(w.wm.X, w.Id)
 	if name == "" || err != nil {
-		name, _ = icccm.WmNameGet(w.X, w.Id)
+		name, _ = icccm.WmNameGet(w.wm.X, w.Id)
 	}
 
 	return name
@@ -130,7 +153,7 @@ func (w *Window) SetBorderColor(color int) {
 
 func (w *Window) SetBorderWidth(width int) {
 	w.BorderWidth = width
-	xproto.ConfigureWindow(w.X.Conn(), w.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(width)})
+	xproto.ConfigureWindow(w.wm.X.Conn(), w.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(width)})
 }
 
 func (w *Window) Raise() {
@@ -180,10 +203,6 @@ func (w *Window) OnLower(xu *xgbutil.XUtil, ev xevent.ButtonPressEvent) {
 }
 
 func (w *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
-	// rect, err := w.Geometry()
-	// should(err)
-	// x, y := rect.X(), rect.Y()
-	// w.curDrag = drag{x, y, rootX, rootY, 0}
 	w.curDrag = drag{w.Geom.X, w.Geom.Y, rootX, rootY, cornerNone}
 	w.Raise()
 	return true, w.wm.Cursors["fleur"]
@@ -312,11 +331,11 @@ func (w *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
 
 func (w *Window) Focus() {
 	w.Window.Focus()
-	should(ewmh.ActiveWindowSet(w.X, w.Id))
+	should(ewmh.ActiveWindowSet(w.wm.X, w.Id))
 }
 
 func (w *Window) Focusable() bool {
-	hints, err := icccm.WmHintsGet(w.X, w.Id)
+	hints, err := icccm.WmHintsGet(w.wm.X, w.Id)
 	if err != nil {
 		LogWindowEvent(w, "Could not read hints")
 		return true
@@ -326,29 +345,15 @@ func (w *Window) Focusable() bool {
 
 func (w *Window) FocusIn(xu *xgbutil.XUtil, ev xevent.FocusInEvent) {
 	LogWindowEvent(w, "Focus in")
+	// TODO configurable border color
 	w.SetBorderColor(0xFFC125)
 }
 
 func (w *Window) FocusOut(xu *xgbutil.XUtil, ev xevent.FocusOutEvent) {
 	LogWindowEvent(w, "Focus out")
+	// TODO configurable border color
 	w.SetBorderColor(0xFF0000)
 }
-
-// func (w *Window) AboutToBeDestroyed() bool {
-//	queue := xevent.Peek(w.wm.X)
-//	for _, e := range queue {
-//		ev := e.Event
-//		if ev == nil {
-//			continue
-//		}
-
-//		if ev, ok := ev.(xproto.DestroyNotifyEvent); ok && ev.Window == w.Id {
-//			return true
-//		}
-//	}
-
-//	return false
-// }
 
 func (w *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
 	LogWindowEvent(w, "Destroying")
@@ -361,7 +366,7 @@ func (w *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
 	w.Mapped = false
 	w.Detach()
 	w.State = icccm.StateIconic
-	should(icccm.WmStateSet(w.X, w.Id, &icccm.WmState{State: uint(w.State)}))
+	should(icccm.WmStateSet(w.wm.X, w.Id, &icccm.WmState{State: uint(w.State)}))
 }
 
 func (w *Window) Init() {
@@ -372,6 +377,7 @@ func (w *Window) Init() {
 	w.SetBorderWidth(w.wm.Config.BorderWidth)
 	w.SetBorderColor(w.wm.Config.BorderColor)
 
+	// TODO configurable key binds
 	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-1", true, w.MoveBegin, w.MoveStep, w.MoveEnd)
 	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-2", true, w.ResizeBegin, w.ResizeStep, w.ResizeEnd)
 	should(mousebind.ButtonPressFun(w.OnLower).Connect(w.wm.X, w.Id, "Mod1-3", false, true))
@@ -391,7 +397,7 @@ func (w *Window) Init() {
 		w.Geom.Height = int(attr.Height)
 	}
 
-	should(icccm.WmStateSet(w.X, w.Id, &icccm.WmState{State: uint(w.State)}))
+	should(icccm.WmStateSet(w.wm.X, w.Id, &icccm.WmState{State: uint(w.State)}))
 }
 
 type WM struct {
@@ -428,7 +434,7 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	}
 
 	win.Map()
-	if hints.Flags&icccm.HintState > 0 {
+	if (hints.Flags & icccm.HintState) > 0 {
 		win.State = State(hints.InitialState)
 	} else {
 		win.State = icccm.StateNormal
@@ -509,6 +515,7 @@ func (w *Window) Attributes() *xproto.GetWindowAttributesReply {
 func (wm *WM) NewWindow(c xproto.Window) *Window {
 	// Just for extra security
 	if win, ok := wm.Windows[c]; ok {
+		LogWindowEvent(win, "NewWindow called for the same window twice")
 		return win
 	}
 
@@ -642,29 +649,6 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	must(ewmh.WmNameSet(wm.X, win.Id, "gwm"))
 
 	xevent.Main(wm.X)
-}
-
-func snapcalc(n0, n1, e0, e1, snapdist int) int {
-	var s0, s1 int
-
-	if abs(e0-n0) <= snapdist {
-		s0 = e0 - n0
-	}
-
-	if abs(e1-n1) <= snapdist {
-		s1 = e1 - n1
-	}
-
-	if s0 != 0 && s1 != 0 && abs(s0) < abs(s1) {
-		return s0
-	}
-	if s0 != 0 {
-		return s0
-	}
-	if s1 != 0 {
-		return s1
-	}
-	return 0
 }
 
 func main() {
