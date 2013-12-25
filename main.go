@@ -387,16 +387,6 @@ func (w *Window) Init() {
 	xevent.FocusInFun(w.FocusIn).Connect(w.wm.X, w.Id)
 	xevent.FocusOutFun(w.FocusOut).Connect(w.wm.X, w.Id)
 
-	attr, err := xproto.GetGeometry(w.X.Conn(), xproto.Drawable(w.Id)).Reply()
-	if err != nil {
-		should(err)
-	} else {
-		w.Geom.X = int(attr.X)
-		w.Geom.Y = int(attr.Y)
-		w.Geom.Width = int(attr.Width)
-		w.Geom.Height = int(attr.Height)
-	}
-
 	should(icccm.WmStateSet(w.wm.X, w.Id, &icccm.WmState{State: uint(w.State)}))
 }
 
@@ -502,6 +492,15 @@ func (w *Window) SendStructureNotify() {
 func (wm *WM) CreateNotify(xu *xgbutil.XUtil, ev xevent.CreateNotifyEvent) {
 	win := wm.NewWindow(ev.Window)
 	LogWindowEvent(win, "Created new window")
+	attr, err := xproto.GetGeometry(wm.X.Conn(), xproto.Drawable(win.Id)).Reply()
+	if err != nil {
+		should(err)
+	} else {
+		win.Geom.X = int(attr.X)
+		win.Geom.Y = int(attr.Y)
+		win.Geom.Width = int(attr.Width)
+		win.Geom.Height = int(attr.Height)
+	}
 }
 
 func (w *Window) Attributes() *xproto.GetWindowAttributesReply {
