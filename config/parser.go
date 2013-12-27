@@ -61,7 +61,7 @@ var parseMap = map[string]parseDecl{
 		case 2:
 			cs = ClientSpec{Name: parts[0], Class: parts[1]}
 		default:
-			// TODO return error
+			return fmt.Errorf("invalid clientspec %q", in[1])
 		}
 		cfg.Autogroups[cs] = group
 		return nil
@@ -77,7 +77,7 @@ var parseMap = map[string]parseDecl{
 			// TODO make sure the mod is valid
 			key = KeySpec{Mods: parts[0], Key: parts[1]}
 		default:
-			// TODO return error
+			return fmt.Errorf("invalid keyspec %q", in[0])
 		}
 		if in[1] == "unmap" {
 			delete(cfg.Binds, key)
@@ -137,10 +137,9 @@ var parseMap = map[string]parseDecl{
 		case 1:
 			key = MouseSpec{Key: parts[0]}
 		case 2:
-			// TODO make sure the mod is valid
 			key = MouseSpec{Mods: parts[0], Key: parts[1]}
 		default:
-			// TODO return error
+			return fmt.Errorf("invalid mousepec %q", in[0])
 		}
 		if in[1] == "unmap" {
 			delete(cfg.MouseBinds, key)
@@ -175,7 +174,7 @@ var parseMap = map[string]parseDecl{
 		case "no":
 			cfg.Sticky = false
 		default:
-			// FIXME return error
+			return fmt.Errorf("invalid value %q for sticky", in[0])
 		}
 		return nil
 	}},
@@ -193,18 +192,20 @@ func Parse(r io.Reader) (*Config, error) {
 	cnt, _ := ioutil.ReadAll(r)
 	_, ch := lex(string(cnt))
 	for {
-		command := <-ch
+		command, ok := <-ch
+		if !ok {
+			return cfg, errors.New("internal error")
+		}
+
 		if command.typ == itemEOF {
 			return cfg, nil
 		}
 		if command.typ != itemString {
-			panic("expected string, got " + command.String())
-			// FIXME expected string
+			return cfg, errors.New("unexpected token " + command.String())
 		}
 		decl, ok := parseMap[command.val]
 		if !ok {
-			panic("Unknown command " + command.val)
-			// FIXME handle this
+			return cfg, errors.New("unknown option " + command.val)
 		}
 		in, err := expect(ch, decl.num)
 		if err != nil {
