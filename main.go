@@ -319,11 +319,19 @@ func (w *Window) moveAndResize() {
 
 func (w *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
 	LogWindowEvent(w, "Enter")
+	if w == w.wm.CurWindow {
+		return
+	}
 	if !w.Focusable() {
 		LogWindowEvent(w, "\tnot focusable, skipping")
 		return
 	}
+	w.SetBorderColor(w.wm.Config.Colors["activeborder"])
 	w.Focus()
+	if curwin := w.wm.CurWindow; curwin != nil {
+		curwin.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
+	}
+	w.wm.CurWindow = w
 }
 
 func (w *Window) Focus() {
@@ -338,16 +346,6 @@ func (w *Window) Focusable() bool {
 		return true
 	}
 	return hints.Input == 1
-}
-
-func (w *Window) FocusIn(xu *xgbutil.XUtil, ev xevent.FocusInEvent) {
-	LogWindowEvent(w, "Focus in")
-	w.SetBorderColor(w.wm.Config.Colors["activeborder"])
-}
-
-func (w *Window) FocusOut(xu *xgbutil.XUtil, ev xevent.FocusOutEvent) {
-	LogWindowEvent(w, "Focus out")
-	w.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
 }
 
 func (w *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
@@ -388,18 +386,17 @@ func (w *Window) Init() {
 	xevent.UnmapNotifyFun(w.UnmapNotify).Connect(w.wm.X, w.Id)
 	xevent.DestroyNotifyFun(w.DestroyNotify).Connect(w.wm.X, w.Id)
 	xevent.EnterNotifyFun(w.EnterNotify).Connect(w.wm.X, w.Id)
-	xevent.FocusInFun(w.FocusIn).Connect(w.wm.X, w.Id)
-	xevent.FocusOutFun(w.FocusOut).Connect(w.wm.X, w.Id)
 
 	should(icccm.WmStateSet(w.wm.X, w.Id, &icccm.WmState{State: uint(w.State)}))
 }
 
 type WM struct {
-	X       *xgbutil.XUtil
-	Cursors map[string]xproto.Cursor
-	Root    *Window
-	Config  *config.Config
-	Windows map[xproto.Window]*Window
+	X         *xgbutil.XUtil
+	Cursors   map[string]xproto.Cursor
+	Root      *Window
+	Config    *config.Config
+	Windows   map[xproto.Window]*Window
+	CurWindow *Window
 }
 
 func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
