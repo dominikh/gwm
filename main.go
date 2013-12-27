@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/BurntSushi/xgbutil"
 	"github.com/BurntSushi/xgbutil/ewmh"
@@ -12,7 +15,7 @@ import (
 	"github.com/BurntSushi/xgbutil/xinerama"
 	"github.com/BurntSushi/xgbutil/xrect"
 	"github.com/BurntSushi/xgbutil/xwindow"
-	"log"
+	"honnef.co/go/gwm/config"
 )
 
 func min(x, y int) int {
@@ -55,7 +58,7 @@ func should(err error) {
 	log.Println("Error:", err)
 }
 
-func subtractGaps(sc xrect.Rect, gap Gap) xrect.Rect {
+func subtractGaps(sc xrect.Rect, gap config.Gap) xrect.Rect {
 	// Copy into a new xrect.Rect
 	out := xrect.New(sc.Pieces())
 	out.XSet(out.X() + gap.Left)
@@ -345,14 +348,12 @@ func (w *Window) Focusable() bool {
 
 func (w *Window) FocusIn(xu *xgbutil.XUtil, ev xevent.FocusInEvent) {
 	LogWindowEvent(w, "Focus in")
-	// TODO configurable border color
-	w.SetBorderColor(0xFFC125)
+	w.SetBorderColor(w.wm.Config.Colors["activeborder"])
 }
 
 func (w *Window) FocusOut(xu *xgbutil.XUtil, ev xevent.FocusOutEvent) {
 	LogWindowEvent(w, "Focus out")
-	// TODO configurable border color
-	w.SetBorderColor(0xFF0000)
+	w.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
 }
 
 func (w *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
@@ -375,7 +376,7 @@ func (w *Window) Init() {
 	LogWindowEvent(w, "Initializing")
 	should(w.Listen(xproto.EventMaskEnterWindow, xproto.EventMaskFocusChange, xproto.EventMaskStructureNotify, xproto.EventMaskPointerMotion))
 	w.SetBorderWidth(w.wm.Config.BorderWidth)
-	w.SetBorderColor(w.wm.Config.BorderColor)
+	w.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
 
 	// TODO configurable key binds
 	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-1", true, w.MoveBegin, w.MoveStep, w.MoveEnd)
@@ -394,18 +395,8 @@ type WM struct {
 	X       *xgbutil.XUtil
 	Cursors map[string]xproto.Cursor
 	Root    *Window
-	Config  Config
+	Config  *config.Config
 	Windows map[xproto.Window]*Window
-}
-
-type Gap struct {
-	Top, Bottom, Left, Right int
-}
-type Config struct {
-	BorderWidth int
-	BorderColor int
-	Snapdist    int
-	Gap         Gap
 }
 
 func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
@@ -651,13 +642,13 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 }
 
 func main() {
+	f, _ := os.Open("/home/dominikh/.cwmrc")
+	cfg, err := config.Parse(f)
+	if err != nil {
+		panic(err)
+	}
 	wm := &WM{
-		Config: Config{
-			BorderWidth: 1,
-			BorderColor: 0xFF0000,
-			Snapdist:    10,
-			Gap:         Gap{22, 0, 0, 0},
-		},
+		Config:  cfg,
 		Cursors: make(map[string]xproto.Cursor),
 		Windows: make(map[xproto.Window]*Window),
 	}
