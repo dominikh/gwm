@@ -785,7 +785,7 @@ type MouseSpec struct {
 
 type Config struct {
 	BorderWidth int
-	SnapDist    int
+	Snapdist    int
 	Colors      map[string]int
 	Gap         Gap
 	Autogroups  map[ClientSpec]int
@@ -921,7 +921,7 @@ var parseMap = map[string]parseDecl{
 		if err != nil {
 			return err
 		}
-		cfg.SnapDist = i
+		cfg.Snapdist = i
 		return nil
 	}},
 
