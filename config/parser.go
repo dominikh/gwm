@@ -12,7 +12,7 @@ import (
 
 // generated from /usr/share/X11/rgb.txt
 // TODO actually query the X server for color names
-var colors = map[string]Color{
+var colors = map[string]int{
 	"snow":                   0xfffafa,
 	"ghost white":            0xf8f8ff,
 	"ghostwhite":             0xf8f8ff,
@@ -767,7 +767,6 @@ var colors = map[string]Color{
 	"lightgreen":             0x90ee90,
 }
 
-type Color int
 type Gap struct {
 	Top, Bottom, Left, Right int
 }
@@ -787,7 +786,7 @@ type MouseSpec struct {
 type Config struct {
 	BorderWidth int
 	SnapDist    int
-	Colors      map[string]Color
+	Colors      map[string]int
 	Gap         Gap
 	Autogroups  map[ClientSpec]int
 	Binds       map[KeySpec]string
@@ -943,7 +942,7 @@ func Parse(r io.Reader) (*Config, error) {
 	cfg := &Config{}
 	cfg.Autogroups = make(map[ClientSpec]int)
 	cfg.Binds = make(map[KeySpec]string)
-	cfg.Colors = make(map[string]Color)
+	cfg.Colors = make(map[string]int)
 	cfg.Commands = make(map[string]string)
 	cfg.MouseBinds = make(map[MouseSpec]string)
 	cfg.MoveAmount = 1
