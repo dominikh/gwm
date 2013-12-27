@@ -793,7 +793,7 @@ type Config struct {
 	Commands    map[string]string
 	Font        string // FIXME will we support Xft?
 	Ignores     []string
-	MouseBinds  map[MouseSpec]string
+	MouseBinds  map[string]MouseSpec
 	MoveAmount  int // default: 1
 	Sticky      bool
 }
@@ -900,9 +900,14 @@ var parseMap = map[string]parseDecl{
 			return fmt.Errorf("invalid mousepec %q", in[0])
 		}
 		if in[1] == "unmap" {
-			delete(cfg.MouseBinds, key)
+			for k, v := range cfg.MouseBinds {
+				if v == key {
+					delete(cfg.MouseBinds, k)
+					break
+				}
+			}
 		} else {
-			cfg.MouseBinds[key] = in[1]
+			cfg.MouseBinds[in[1]] = key
 		}
 		return nil
 	}},
@@ -944,7 +949,7 @@ func Parse(r io.Reader) (*Config, error) {
 	cfg.Binds = make(map[KeySpec]string)
 	cfg.Colors = make(map[string]int)
 	cfg.Commands = make(map[string]string)
-	cfg.MouseBinds = make(map[MouseSpec]string)
+	cfg.MouseBinds = make(map[string]MouseSpec)
 	cfg.MoveAmount = 1
 
 	cnt, _ := ioutil.ReadAll(r)
