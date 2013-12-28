@@ -658,7 +658,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 }
 
 func main() {
-	f, _ := os.Open("/home/dominikh/.cwmrc")
+	f, _ := os.Open("./cwmrc")
 	cfg, err := config.Parse(f)
 	if err != nil {
 		panic(err)
