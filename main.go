@@ -10,6 +10,7 @@ import (
 	"github.com/BurntSushi/xgbutil"
 	"github.com/BurntSushi/xgbutil/ewmh"
 	"github.com/BurntSushi/xgbutil/icccm"
+	"github.com/BurntSushi/xgbutil/keybind"
 	"github.com/BurntSushi/xgbutil/mousebind"
 	"github.com/BurntSushi/xgbutil/xcursor"
 	"github.com/BurntSushi/xgbutil/xevent"
@@ -616,12 +617,14 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	})
 
 	mousebind.Initialize(wm.X)
+	keybind.Initialize(wm.X)
 
 	wm.Root = wm.NewWindow(wm.X.RootWin())
 	xproto.ChangeWindowAttributes(wm.X.Conn(), wm.Root.Id, xproto.CwCursor, []uint32{uint32(wm.Cursors["normal"])})
 	for _, w := range wm.QueryTree() {
 		win := wm.NewWindow(w)
 		if win.State&(icccm.StateNormal|icccm.StateIconic) > 0 && !win.Attributes().OverrideRedirect {
+			// FIXME note initial geometry for existing clients
 			win.Init()
 		}
 	}
@@ -630,6 +633,17 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	xevent.MapRequestFun(wm.MapRequest).Connect(xu, wm.Root.Id)
 	xevent.ConfigureRequestFun(wm.ConfigureRequest).Connect(xu, wm.Root.Id)
 	xevent.CreateNotifyFun(wm.CreateNotify).Connect(xu, wm.Root.Id)
+
+	for key, cmd := range wm.Config.Binds {
+		key, cmd := key, cmd
+		should(keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+			if fn, ok := commands[cmd]; ok {
+				fn(wm, ev)
+			} else {
+				log.Printf("Could not map %s to %q: Command does not exist", key.ToXGB(), cmd)
+			}
+		}).Connect(wm.X, wm.Root.Id, key.ToXGB(), true))
+	}
 
 	should(ewmh.NumberOfDesktopsSet(wm.X, 1))
 	should(ewmh.CurrentDesktopSet(wm.X, 0))
