@@ -680,7 +680,7 @@ func execute(bin string) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	err := cmd.Start()
 	if err != nil {
-		log.Printf("Could not execute %q", cmd)
+		log.Printf("Could not execute %q", bin)
 		return err
 	}
 	cmd.Process.Release()
