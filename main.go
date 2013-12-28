@@ -17,6 +17,7 @@ import (
 	"github.com/BurntSushi/xgbutil/xinerama"
 	"github.com/BurntSushi/xgbutil/xrect"
 	"github.com/BurntSushi/xgbutil/xwindow"
+
 	"honnef.co/go/gwm/config"
 )
 
@@ -640,6 +641,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 			if fn, ok := commands[cmd]; ok {
 				fn(wm, ev)
 			} else {
+				// TODO use execute() to run command
 				log.Printf("Could not map %s to %q: Command does not exist", key.ToXGB(), cmd)
 			}
 		}).Connect(wm.X, wm.Root.Id, key.ToXGB(), true))
@@ -685,19 +687,37 @@ func execute(bin string) error {
 	return nil
 }
 
+func winmovefunc(xf, yf int) func(*WM, xevent.KeyPressEvent) {
+	return func(wm *WM, ev xevent.KeyPressEvent) {
+		if wm.CurWindow == nil {
+			return
+		}
+		win := wm.CurWindow
+		win.Move(win.Geom.X+xf*wm.Config.MoveAmount, win.Geom.Y+yf*wm.Config.MoveAmount)
+		// TODO apply snapping
+	}
+}
+
+func winfunc(fn func(*Window)) func(*WM, xevent.KeyPressEvent) {
+	return func(wm *WM, ev xevent.KeyPressEvent) {
+		if wm.CurWindow == nil {
+			return
+		}
+		fn(wm.CurWindow)
+	}
+}
+
 var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
-	"lower": func(wm *WM, ev xevent.KeyPressEvent) {
-		if wm.CurWindow == nil {
-			return
-		}
-		wm.CurWindow.Lower()
-	},
-	"raise": func(wm *WM, ev xevent.KeyPressEvent) {
-		if wm.CurWindow == nil {
-			return
-		}
-		wm.CurWindow.Raise()
-	},
+	"lower":        winfunc((*Window).Lower),
+	"raise":        winfunc((*Window).Raise),
+	"moveup":       winmovefunc(0, -1),
+	"bigmoveup":    winmovefunc(0, -10),
+	"movedown":     winmovefunc(0, 1),
+	"bigmovedown":  winmovefunc(0, 10),
+	"moveleft":     winmovefunc(-1, 0),
+	"bigmoveleft":  winmovefunc(-10, 0),
+	"moveright":    winmovefunc(1, 0),
+	"bigmoveright": winmovefunc(10, 0),
 	"terminal": func(wm *WM, ev xevent.KeyPressEvent) {
 		if cmd, ok := wm.Config.Commands["term"]; ok {
 			execute(cmd)
