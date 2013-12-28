@@ -641,8 +641,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 			if fn, ok := commands[cmd]; ok {
 				fn(wm, ev)
 			} else {
-				// TODO use execute() to run command
-				log.Printf("Could not map %s to %q: Command does not exist", key.ToXGB(), cmd)
+				execute(cmd)
 			}
 		}).Connect(wm.X, wm.Root.Id, key.ToXGB(), true))
 	}
