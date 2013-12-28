@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"os/exec"
+	"syscall"
 
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/BurntSushi/xgbutil"
@@ -655,4 +657,36 @@ func main() {
 	xu, err := xgbutil.NewConn()
 	must(err)
 	wm.Init(xu)
+}
+
+func execute(bin string) error {
+	cmd := exec.Command(bin)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	err := cmd.Start()
+	if err != nil {
+		log.Printf("Could not execute %q", cmd)
+		return err
+	}
+	cmd.Process.Release()
+	return nil
+}
+
+var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
+	"lower": func(wm *WM, ev xevent.KeyPressEvent) {
+		if wm.CurWindow == nil {
+			return
+		}
+		wm.CurWindow.Lower()
+	},
+	"raise": func(wm *WM, ev xevent.KeyPressEvent) {
+		if wm.CurWindow == nil {
+			return
+		}
+		wm.CurWindow.Raise()
+	},
+	"terminal": func(wm *WM, ev xevent.KeyPressEvent) {
+		if cmd, ok := wm.Config.Commands["term"]; ok {
+			execute(cmd)
+		}
+	},
 }
