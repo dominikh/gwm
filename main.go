@@ -418,6 +418,15 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 		hints = &icccm.Hints{}
 	}
 
+	// FIXME set x and y to pointer position only if the app didn't set USPosition/PPosition
+	ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
+	if err == nil {
+		win.Geom.X = int(ptr.RootX) - win.Geom.Width/2
+		win.Geom.Y = int(ptr.RootY) - win.Geom.Height/2
+	} else {
+		log.Println("Could not get pointer position:", err)
+	}
+	win.move()
 	win.Map()
 	if (hints.Flags & icccm.HintState) > 0 {
 		win.State = State(hints.InitialState)
@@ -427,6 +436,8 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	win.Init()
 	win.SendStructureNotify()
 	win.Mapped = true
+
+	// FIXME make sure we get all the hints stuff right
 }
 
 func LogWindowEvent(win *Window, s interface{}) {
