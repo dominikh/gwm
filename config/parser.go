@@ -779,12 +779,7 @@ type KeySpec struct {
 	Key  string
 }
 
-type MouseSpec struct {
-	Mods string
-	Key  string
-}
-
-func (k MouseSpec) ToXGB() string {
+func (k KeySpec) ToXGB() string {
 	var out []string
 	for _, c := range k.Mods {
 		switch c {
@@ -812,7 +807,7 @@ type Config struct {
 	Commands    map[string]string
 	Font        string // FIXME will we support Xft?
 	Ignores     []string
-	MouseBinds  map[string]MouseSpec
+	MouseBinds  map[string]KeySpec
 	MoveAmount  int // default: 1
 	Sticky      bool
 }
@@ -909,12 +904,12 @@ var parseMap = map[string]parseDecl{
 
 	"mousebind": {2, func(cfg *Config, in []string) error {
 		parts := strings.SplitN(in[0], "-", 2)
-		var key MouseSpec
+		var key KeySpec
 		switch len(parts) {
 		case 1:
-			key = MouseSpec{Key: parts[0]}
+			key = KeySpec{Key: parts[0]}
 		case 2:
-			key = MouseSpec{Mods: parts[0], Key: parts[1]}
+			key = KeySpec{Mods: parts[0], Key: parts[1]}
 		default:
 			return fmt.Errorf("invalid mousepec %q", in[0])
 		}
@@ -968,7 +963,7 @@ func Parse(r io.Reader) (*Config, error) {
 	cfg.Binds = make(map[KeySpec]string)
 	cfg.Colors = make(map[string]int)
 	cfg.Commands = make(map[string]string)
-	cfg.MouseBinds = make(map[string]MouseSpec)
+	cfg.MouseBinds = make(map[string]KeySpec)
 	cfg.MoveAmount = 1
 
 	cnt, _ := ioutil.ReadAll(r)
