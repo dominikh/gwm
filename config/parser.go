@@ -1179,12 +1179,20 @@ func lexText(l *lexer) stateFn {
 }
 
 func lexString(l *lexer) stateFn {
+	quoted := false
 	defer func() {
 		if l.input[l.start:l.pos] != "" {
+			if quoted {
+				l.start++
+				l.pos--
+			}
 			l.emit(itemString)
+			if quoted {
+				l.pos++
+				l.start = l.pos
+			}
 		}
 	}()
-	quoted := false
 	if l.input[l.pos-1] == '"' {
 		quoted = true
 	}
