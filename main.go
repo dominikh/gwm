@@ -156,6 +156,12 @@ const (
 
 type State int
 
+type maximizedState int
+
+const (
+	maximizedFull maximizedState = 1
+)
+
 type Geom struct {
 	X, Y          int
 	Width, Height int
@@ -170,6 +176,8 @@ type Window struct {
 	BorderWidth int
 	wm          *WM
 	curDrag     *drag
+	oldGeom     Geom
+	maximized   maximizedState
 }
 
 func (win *Window) Name() string {
@@ -324,12 +332,14 @@ func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int
 }
 
 func (win *Window) Move(x, y int) {
+	// TODO document that this function will reset the maximized state
 	win.Geom.X = x
 	win.Geom.Y = y
 	win.move()
 }
 
 func (win *Window) MoveAndResize(x, y, width, height int) {
+	// TODO document that this function will reset the maximized state
 	win.Geom.X = x
 	win.Geom.Y = y
 	win.Geom.Width = width
@@ -337,13 +347,86 @@ func (win *Window) MoveAndResize(x, y, width, height int) {
 	win.moveAndResize()
 }
 
-// move moves the window based on its current Geom.
+func (win *Window) Maximize() {
+	// TODO set wm_state to maximized(?)
+	// TODO support vmaximize and hmaximize
+	if win.maximized == maximizedFull {
+		return
+	}
+
+	// TODO if we're v/hmaximized, should we still store the current
+	// geom, thus making the partially maximized state the one we'll
+	// return to, or should we keep the fully unmaximized geom?
+
+	win.oldGeom = win.Geom
+	win.Geom = win.Screen()
+	win.Geom.Width -= 2 * win.wm.Config.BorderWidth
+	win.Geom.Height -= 2 * win.wm.Config.BorderWidth
+	win.moveAndResizeNoReset()
+	win.maximized = maximizedFull
+}
+
+func (win *Window) Unmaximize() {
+	// TODO support vmaximize and hmaximize
+	if win.maximized == 0 {
+		return
+	}
+
+	win.Geom = win.oldGeom
+	win.moveAndResize()
+	if !win.ContainsPointer() {
+		win.CenterPointer()
+	}
+}
+
+func (win *Window) ToggleMaximize() {
+	// TODO support vmaximize and hmaximize
+	if win.maximized > 0 {
+		win.Unmaximize()
+	} else {
+		win.Maximize()
+	}
+}
+
+func (win *Window) ContainsPointer() bool {
+	ptr, err := xproto.QueryPointer(win.wm.X.Conn(), win.wm.Root.Id).Reply()
+	if err != nil {
+		return false
+	}
+	px, py := int(ptr.RootX), int(ptr.RootY)
+	return !(px < win.Geom.X || px > win.Geom.X+win.Geom.Width ||
+		py < win.Geom.Y || py > win.Geom.Y+win.Geom.Y)
+}
+
+func (win *Window) CenterPointer() {
+	xproto.WarpPointer(win.wm.X.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0,
+		int16(win.Geom.Width/2-win.wm.Config.BorderWidth), int16(win.Geom.Height/2-win.wm.Config.BorderWidth))
+}
+
+// move moves the window based on its current Geom. It also resets the
+// window's maximized state.
 func (win *Window) move() {
+	win.Window.Move(win.Geom.X, win.Geom.Y)
+	win.maximized &= ^maximizedFull
+	// TODO set wm_state
+}
+
+// moveAndResize moves and resizes the window based on its current
+// Geom. It also resets the window's maximized state.
+func (win *Window) moveAndResize() {
+	win.Window.MoveResize(win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
+	win.maximized &= ^maximizedFull
+	// TODO set wm_state
+}
+
+// move moves the window based on its current Geom.
+func (win *Window) moveNoReset() {
 	win.Window.Move(win.Geom.X, win.Geom.Y)
 }
 
-// moveAndResize moves and resizes the window based on its current Geom.
-func (win *Window) moveAndResize() {
+// moveAndResize moves and resizes the window based on its current
+// Geom.
+func (win *Window) moveAndResizeNoReset() {
 	win.Window.MoveResize(win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
 }
 
@@ -504,13 +587,13 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 			log.Println("Could not get pointer position:", err)
 		}
 	}
-	win.move()
+	// TODO read the current wm_state and determine if we're maximized
+	win.moveNoReset()
 	win.Map()
 	// TODO probably should
 	// a) store the border width in every client
 	// b) use that for all calculations involving the border width
-	xproto.WarpPointer(xu.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0,
-		int16(win.Geom.Width/2-wm.Config.BorderWidth), int16(win.Geom.Height/2-wm.Config.BorderWidth))
+	win.CenterPointer()
 	if (hints.Flags & icccm.HintState) > 0 {
 		win.State = State(hints.InitialState)
 	} else {
@@ -777,6 +860,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"bigmoveleft":  winmovefunc(-10, 0),
 	"moveright":    winmovefunc(1, 0),
 	"bigmoveright": winmovefunc(10, 0),
+	"maximize":     winfunc((*Window).ToggleMaximize),
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
