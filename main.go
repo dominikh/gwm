@@ -377,6 +377,16 @@ func (w *Window) Init() {
 	w.SetBorderWidth(w.wm.Config.BorderWidth)
 	w.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
 
+	attr, err := xproto.GetGeometry(w.wm.X.Conn(), xproto.Drawable(w.Id)).Reply()
+	if err != nil {
+		should(err)
+	} else {
+		w.Geom.X = int(attr.X)
+		w.Geom.Y = int(attr.Y)
+		w.Geom.Width = int(attr.Width)
+		w.Geom.Height = int(attr.Height)
+	}
+
 	if ms, ok := w.wm.Config.MouseBinds["window_move"]; ok {
 		mousebind.Drag(w.wm.X, w.Id, w.Id, ms.ToXGB(), true, w.MoveBegin, w.MoveStep, w.MoveEnd)
 	}
@@ -420,7 +430,7 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 		LogWindowEvent(win, "No WM_HINTS")
 		hints = &icccm.Hints{}
 	}
-
+	win.Init()
 	// FIXME set x and y to pointer position only if the app didn't set USPosition/PPosition
 	ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
 	if err == nil {
@@ -436,11 +446,15 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	} else {
 		win.State = icccm.StateNormal
 	}
-	win.Init()
 	win.SendStructureNotify()
 	win.Mapped = true
 
-	// FIXME make sure we get all the hints stuff right
+	// Notes to self:
+	// - x, y, w, h in WM_NORMAL_HINTS are obsolete
+	// - we get the initial window geometry in (*Window).Init(), which
+	//   reads the window's current geometry
+
+	// FIXME make sure we get all the hints stuff right. i.e. set x/y/w/h if requested, call moveresize, etc
 }
 
 func LogWindowEvent(win *Window, s interface{}) {
@@ -466,6 +480,7 @@ func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEven
 	if (m & xproto.ConfigWindowY) > 0 {
 		win.Geom.Y = int(ev.Y)
 	}
+
 	// TODO stack order, border width, sibling
 
 	win.Configure(int(ev.ValueMask),
@@ -501,15 +516,6 @@ func (w *Window) SendStructureNotify() {
 func (wm *WM) CreateNotify(xu *xgbutil.XUtil, ev xevent.CreateNotifyEvent) {
 	win := wm.NewWindow(ev.Window)
 	LogWindowEvent(win, "Created new window")
-	attr, err := xproto.GetGeometry(wm.X.Conn(), xproto.Drawable(win.Id)).Reply()
-	if err != nil {
-		should(err)
-	} else {
-		win.Geom.X = int(attr.X)
-		win.Geom.Y = int(attr.Y)
-		win.Geom.Width = int(attr.Width)
-		win.Geom.Height = int(attr.Height)
-	}
 }
 
 func (w *Window) Attributes() *xproto.GetWindowAttributesReply {
