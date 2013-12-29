@@ -513,7 +513,7 @@ func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEven
 
 	// TODO stack order, border width, sibling
 
-	win.Configure(int(ev.ValueMask),
+	win.Configure(int(ev.ValueMask) & ^(xproto.ConfigWindowSibling|xproto.ConfigWindowStackMode),
 		win.Geom.X,
 		win.Geom.Y,
 		win.Geom.Width,
