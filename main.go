@@ -350,16 +350,11 @@ func (win *Window) MoveAndResize(x, y, width, height int) {
 }
 
 func (win *Window) Maximize(state MaximizedState) {
-	// TODO set wm_state to maximized(?)
-	if (win.maximized & state) > 0 {
-		return
+	// Only store the geometry if we're not maximized at all yet
+	if win.maximized == 0 {
+		win.oldGeom = win.Geom
 	}
 
-	// TODO if we're v/hmaximized, should we still store the current
-	// geom, thus making the partially maximized state the one we'll
-	// return to, or should we keep the fully unmaximized geom?
-
-	win.oldGeom = win.Geom
 	sc := win.Screen()
 	if (state & MaximizedH) > 0 {
 		win.Geom.X = sc.X
@@ -375,10 +370,6 @@ func (win *Window) Maximize(state MaximizedState) {
 }
 
 func (win *Window) Unmaximize(state MaximizedState) {
-	if (win.maximized & state) == 0 {
-		return
-	}
-
 	if (state & MaximizedH) > 0 {
 		win.Geom.X = win.oldGeom.X
 		win.Geom.Width = win.oldGeom.Width
@@ -391,15 +382,15 @@ func (win *Window) Unmaximize(state MaximizedState) {
 	if !win.ContainsPointer() {
 		win.CenterPointer()
 	}
+	win.maximized &= ^state
 	win.updateWmState()
 }
 
 func (win *Window) ToggleMaximize(state MaximizedState) {
-	// TODO support vmaximize and hmaximize
-	if (win.maximized & state) > 0 {
-		win.Unmaximize(state)
-	} else {
+	if state > win.maximized || win.maximized&state == 0 {
 		win.Maximize(state)
+	} else {
+		win.Unmaximize(state)
 	}
 }
 
