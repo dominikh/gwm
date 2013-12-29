@@ -97,7 +97,33 @@ func snapcalc(n0, n1, e0, e1, snapdist int) int {
 	return 0
 }
 
-type Screen struct {
+func LogWindowEvent(win *Window, s interface{}) {
+	log.Printf("%d (%s): %s", win.Id, win.Name(), s)
+}
+
+func printSizeHints(hints *icccm.NormalHints) {
+	log.Printf("Size hints with flags %d", hints.Flags)
+	if (hints.Flags & (icccm.SizeHintUSPosition | icccm.SizeHintPPosition)) > 1 {
+		log.Printf("\tx = %d y = %d", hints.X, hints.Y)
+	}
+	if (hints.Flags & (icccm.SizeHintUSSize | icccm.SizeHintPSize)) > 1 {
+		log.Printf("\tw = %d h = %d", hints.Width, hints.Height)
+	}
+	if (hints.Flags & icccm.SizeHintPMinSize) > 0 {
+		log.Printf("\tmw = %d mh = %d", hints.MinWidth, hints.MinHeight)
+	}
+	if (hints.Flags & icccm.SizeHintPMaxSize) > 0 {
+		log.Printf("\tMw = %d Mh = %d", hints.MaxWidth, hints.MaxHeight)
+	}
+	if (hints.Flags & icccm.SizeHintPResizeInc) > 0 {
+		log.Printf("\tiw = %d ih = %d", hints.WidthInc, hints.HeightInc)
+	}
+	if (hints.Flags & icccm.SizeHintPAspect) > 0 {
+		log.Printf("\taspect information")
+	}
+	if (hints.Flags & icccm.SizeHintPBaseSize) > 0 {
+		log.Printf("\tbw = %d bh = %d", hints.BaseWidth, hints.BaseHeight)
+	}
 }
 
 type corner int
@@ -147,35 +173,35 @@ type Window struct {
 	curDrag     *drag
 }
 
-func (w *Window) Name() string {
-	name, err := ewmh.WmNameGet(w.wm.X, w.Id)
+func (win *Window) Name() string {
+	name, err := ewmh.WmNameGet(win.wm.X, win.Id)
 	if name == "" || err != nil {
-		name, _ = icccm.WmNameGet(w.wm.X, w.Id)
+		name, _ = icccm.WmNameGet(win.wm.X, win.Id)
 	}
 
 	return name
 }
 
-func (w *Window) SetBorderColor(color int) {
-	w.Change(xproto.CwBorderPixel, uint32(color))
+func (win *Window) SetBorderColor(color int) {
+	win.Change(xproto.CwBorderPixel, uint32(color))
 }
 
-func (w *Window) SetBorderWidth(width int) {
-	w.BorderWidth = width
-	xproto.ConfigureWindow(w.wm.X.Conn(), w.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(width)})
+func (win *Window) SetBorderWidth(width int) {
+	win.BorderWidth = width
+	xproto.ConfigureWindow(win.wm.X.Conn(), win.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(width)})
 }
 
-func (w *Window) Raise() {
+func (win *Window) Raise() {
 	windows := make(map[Layer][]*Window)
-	for _, ow := range w.wm.GetWindows(icccm.StateNormal) {
-		if ow.Id == w.Id || ow.Id == w.wm.Root.Id {
+	for _, ow := range win.wm.GetWindows(icccm.StateNormal) {
+		if ow.Id == win.Id || ow.Id == win.wm.Root.Id {
 			continue
 		}
 
 		windows[ow.Layer] = append(windows[ow.Layer], ow)
 	}
 
-	windows[w.Layer] = append(windows[w.Layer], w)
+	windows[win.Layer] = append(windows[win.Layer], win)
 
 	var update []*Window
 	for layer := LayerDesktop; layer <= LayerAbove; layer++ {
@@ -183,14 +209,14 @@ func (w *Window) Raise() {
 			update = append(update, ow)
 		}
 	}
-	w.wm.Restack(update)
+	win.wm.Restack(update)
 }
 
-func (w *Window) Lower() {
+func (win *Window) Lower() {
 	windows := make(map[Layer][]*Window)
-	windows[w.Layer] = []*Window{w}
-	for _, ow := range w.wm.GetWindows(icccm.StateNormal) {
-		if ow.Id == w.Id || ow.Id == w.wm.Root.Id {
+	windows[win.Layer] = []*Window{win}
+	for _, ow := range win.wm.GetWindows(icccm.StateNormal) {
+		if ow.Id == win.Id || ow.Id == win.wm.Root.Id {
 			continue
 		}
 
@@ -203,42 +229,42 @@ func (w *Window) Lower() {
 			update = append(update, ow)
 		}
 	}
-	w.wm.Restack(update)
+	win.wm.Restack(update)
 }
 
-func (w *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
-	w.curDrag = &drag{w.Geom.X, w.Geom.Y, rootX, rootY, cornerNone}
-	w.Raise()
-	return true, w.wm.Cursors["fleur"]
+func (win *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
+	win.curDrag = &drag{win.Geom.X, win.Geom.Y, rootX, rootY, cornerNone}
+	win.Raise()
+	return true, win.wm.Cursors["fleur"]
 }
 
-func (w *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
-	dx := rootX - w.curDrag.offsetX
-	dy := rootY - w.curDrag.offsetY
+func (win *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	dx := rootX - win.curDrag.offsetX
+	dy := rootY - win.curDrag.offsetY
 
 	// FIXME do we need to consider the border here?
-	w.Geom.X = w.curDrag.startX + dx
-	w.Geom.Y = w.curDrag.startY + dy
+	win.Geom.X = win.curDrag.startX + dx
+	win.Geom.Y = win.curDrag.startY + dy
 
-	screen := w.Screen()
-	screen = subtractGaps(screen, w.wm.Config.Gap)
+	screen := win.Screen()
+	screen = subtractGaps(screen, win.wm.Config.Gap)
 
 	if screen == nil {
-		LogWindowEvent(w, "Could not determine screen for window")
+		LogWindowEvent(win, "Could not determine screen for window")
 	} else {
-		w.Geom.X += snapcalc(w.Geom.X, w.Geom.X+w.Geom.Width+w.BorderWidth*2,
-			screen.X(), screen.X()+screen.Width(), w.wm.Config.Snapdist)
-		w.Geom.Y += snapcalc(w.Geom.Y, w.Geom.Y+w.Geom.Height+w.BorderWidth*2,
-			screen.Y(), screen.Y()+screen.Height(), w.wm.Config.Snapdist)
+		win.Geom.X += snapcalc(win.Geom.X, win.Geom.X+win.Geom.Width+win.BorderWidth*2,
+			screen.X(), screen.X()+screen.Width(), win.wm.Config.Snapdist)
+		win.Geom.Y += snapcalc(win.Geom.Y, win.Geom.Y+win.Geom.Height+win.BorderWidth*2,
+			screen.Y(), screen.Y()+screen.Height(), win.wm.Config.Snapdist)
 	}
-	w.move()
+	win.move()
 }
 
-func (w *Window) MoveEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
-	w.curDrag = nil
+func (win *Window) MoveEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	win.curDrag = nil
 }
 
-func (w *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
+func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
 	if eventX < 0 {
 		eventX = 0
 	}
@@ -252,161 +278,199 @@ func (w *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int
 		cursorX, cursorY string
 	)
 
-	if eventX > w.Geom.Width/2 {
+	if eventX > win.Geom.Width/2 {
 		corner |= cornerE
 		cursorX = "right"
-		x = w.Geom.Width
+		x = win.Geom.Width
 	} else {
 		corner |= cornerW
 		cursorX = "left"
 	}
 
-	if eventY > w.Geom.Height/2 {
+	if eventY > win.Geom.Height/2 {
 		corner |= cornerS
 		cursorY = "bottom"
-		y = w.Geom.Height
+		y = win.Geom.Height
 	} else {
 		corner |= cornerN
 		cursorY = "top"
 	}
 
-	w.curDrag = &drag{w.Geom.X, w.Geom.Y, rootX, rootY, corner}
-	xproto.WarpPointer(w.wm.X.Conn(), xproto.WindowNone, w.Id, 0, 0, 0, 0, int16(x), int16(y))
-	return true, w.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
+	win.curDrag = &drag{win.Geom.X, win.Geom.Y, rootX, rootY, corner}
+	xproto.WarpPointer(win.wm.X.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0, int16(x), int16(y))
+	return true, win.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
 }
 
-func (w *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 	// FIXME consider size hints
-	if (w.curDrag.corner & cornerW) > 0 {
-		w.Geom.Width += w.Geom.X - rootX + w.wm.Config.BorderWidth
-		w.Geom.X = rootX - w.wm.Config.BorderWidth
+	if (win.curDrag.corner & cornerW) > 0 {
+		win.Geom.Width += win.Geom.X - rootX + win.wm.Config.BorderWidth
+		win.Geom.X = rootX - win.wm.Config.BorderWidth
 	}
 
-	if (w.curDrag.corner & cornerE) > 0 {
-		w.Geom.Width += rootX - (w.Geom.X + w.Geom.Width + w.wm.Config.BorderWidth)
+	if (win.curDrag.corner & cornerE) > 0 {
+		win.Geom.Width += rootX - (win.Geom.X + win.Geom.Width + win.wm.Config.BorderWidth)
 	}
 
-	if (w.curDrag.corner & cornerS) > 0 {
-		w.Geom.Height += rootY - (w.Geom.Y + w.Geom.Height + w.wm.Config.BorderWidth)
+	if (win.curDrag.corner & cornerS) > 0 {
+		win.Geom.Height += rootY - (win.Geom.Y + win.Geom.Height + win.wm.Config.BorderWidth)
 	}
 
-	if (w.curDrag.corner & cornerN) > 0 {
-		w.Geom.Height += w.Geom.Y - rootY + w.wm.Config.BorderWidth
-		w.Geom.Y = rootY - w.wm.Config.BorderWidth
+	if (win.curDrag.corner & cornerN) > 0 {
+		win.Geom.Height += win.Geom.Y - rootY + win.wm.Config.BorderWidth
+		win.Geom.Y = rootY - win.wm.Config.BorderWidth
 	}
 
-	w.moveAndResize()
+	win.moveAndResize()
 }
 
-func (w *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
-	w.curDrag = nil
+func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	win.curDrag = nil
 }
 
-func (w *Window) Move(x, y int) {
-	w.Geom.X = x
-	w.Geom.Y = y
-	w.move()
+func (win *Window) Move(x, y int) {
+	win.Geom.X = x
+	win.Geom.Y = y
+	win.move()
 }
 
-func (w *Window) MoveAndResize(x, y, width, height int) {
-	w.Geom.X = x
-	w.Geom.Y = y
-	w.Geom.Width = width
-	w.Geom.Height = height
-	w.moveAndResize()
+func (win *Window) MoveAndResize(x, y, width, height int) {
+	win.Geom.X = x
+	win.Geom.Y = y
+	win.Geom.Width = width
+	win.Geom.Height = height
+	win.moveAndResize()
 }
 
 // move moves the window based on its current Geom.
-func (w *Window) move() {
-	w.Window.Move(w.Geom.X, w.Geom.Y)
+func (win *Window) move() {
+	win.Window.Move(win.Geom.X, win.Geom.Y)
 }
 
 // moveAndResize moves and resizes the window based on its current Geom.
-func (w *Window) moveAndResize() {
-	w.Window.MoveResize(w.Geom.X, w.Geom.Y, w.Geom.Width, w.Geom.Height)
+func (win *Window) moveAndResize() {
+	win.Window.MoveResize(win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
 }
 
-func (w *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
-	LogWindowEvent(w, "Enter")
-	if w == w.wm.CurWindow {
+func (win *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
+	LogWindowEvent(win, "Enter")
+	if win == win.wm.CurWindow {
 		return
 	}
-	if !w.Focusable() {
-		LogWindowEvent(w, "\tnot focusable, skipping")
+	if !win.Focusable() {
+		LogWindowEvent(win, "\tnot focusable, skipping")
 		return
 	}
-	w.SetBorderColor(w.wm.Config.Colors["activeborder"])
-	w.Focus()
-	if curwin := w.wm.CurWindow; curwin != nil {
-		curwin.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
+	win.SetBorderColor(win.wm.Config.Colors["activeborder"])
+	win.Focus()
+	if curwin := win.wm.CurWindow; curwin != nil {
+		curwin.SetBorderColor(win.wm.Config.Colors["inactiveborder"])
 	}
-	w.wm.CurWindow = w
+	win.wm.CurWindow = win
 }
 
-func (w *Window) Focus() {
-	w.Window.Focus()
-	should(ewmh.ActiveWindowSet(w.wm.X, w.Id))
+func (win *Window) Focus() {
+	win.Window.Focus()
+	should(ewmh.ActiveWindowSet(win.wm.X, win.Id))
 }
 
-func (w *Window) Focusable() bool {
-	hints, err := icccm.WmHintsGet(w.wm.X, w.Id)
+func (win *Window) Focusable() bool {
+	hints, err := icccm.WmHintsGet(win.wm.X, win.Id)
 	if err != nil {
-		LogWindowEvent(w, "Could not read hints")
+		LogWindowEvent(win, "Could not read hints")
 		return true
 	}
 	return hints.Input == 1
 }
 
-func (w *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
-	LogWindowEvent(w, "Destroying")
-	w.Detach()
-	delete(w.wm.Windows, w.Id)
+func (win *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
+	LogWindowEvent(win, "Destroying")
+	win.Detach()
+	delete(win.wm.Windows, win.Id)
 }
 
-func (w *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
-	LogWindowEvent(w, "Unmapping")
-	w.Mapped = false
-	w.Detach()
-	w.State = icccm.StateIconic
-	should(icccm.WmStateSet(w.wm.X, w.Id, &icccm.WmState{State: uint(w.State)}))
+func (win *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
+	LogWindowEvent(win, "Unmapping")
+	win.Mapped = false
+	win.Detach()
+	win.State = icccm.StateIconic
+	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
 }
 
-func (w *Window) Init() {
+func (win *Window) Init() {
 	// TODO do something if the state is iconified
 	// TODO set the window's layer
-	LogWindowEvent(w, "Initializing")
-	should(w.Listen(xproto.EventMaskEnterWindow, xproto.EventMaskFocusChange, xproto.EventMaskStructureNotify, xproto.EventMaskPointerMotion))
-	w.SetBorderWidth(w.wm.Config.BorderWidth)
-	w.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
+	LogWindowEvent(win, "Initializing")
+	should(win.Listen(xproto.EventMaskEnterWindow, xproto.EventMaskFocusChange,
+		xproto.EventMaskStructureNotify, xproto.EventMaskPointerMotion))
+	win.SetBorderWidth(win.wm.Config.BorderWidth)
+	win.SetBorderColor(win.wm.Config.Colors["inactiveborder"])
 
-	attr, err := xproto.GetGeometry(w.wm.X.Conn(), xproto.Drawable(w.Id)).Reply()
+	attr, err := xproto.GetGeometry(win.wm.X.Conn(), xproto.Drawable(win.Id)).Reply()
 	if err != nil {
 		should(err)
 	} else {
-		w.Geom.X = int(attr.X)
-		w.Geom.Y = int(attr.Y)
-		w.Geom.Width = int(attr.Width)
-		w.Geom.Height = int(attr.Height)
+		win.Geom.X = int(attr.X)
+		win.Geom.Y = int(attr.Y)
+		win.Geom.Width = int(attr.Width)
+		win.Geom.Height = int(attr.Height)
 	}
 
-	if ms, ok := w.wm.Config.MouseBinds["window_move"]; ok {
-		mousebind.Drag(w.wm.X, w.Id, w.Id, ms.ToXGB(), true, w.MoveBegin, w.MoveStep, w.MoveEnd)
+	if ms, ok := win.wm.Config.MouseBinds["window_move"]; ok {
+		mousebind.Drag(win.wm.X, win.Id, win.Id, ms.ToXGB(), true, win.MoveBegin, win.MoveStep, win.MoveEnd)
 	}
 
-	if ms, ok := w.wm.Config.MouseBinds["window_resize"]; ok {
-		mousebind.Drag(w.wm.X, w.Id, w.Id, ms.ToXGB(), true, w.ResizeBegin, w.ResizeStep, w.ResizeEnd)
+	if ms, ok := win.wm.Config.MouseBinds["window_resize"]; ok {
+		mousebind.Drag(win.wm.X, win.Id, win.Id, ms.ToXGB(), true, win.ResizeBegin, win.ResizeStep, win.ResizeEnd)
 	}
 
-	if ms, ok := w.wm.Config.MouseBinds["window_lower"]; ok {
-		fn := func(xu *xgbutil.XUtil, ev xevent.ButtonPressEvent) { w.Lower() }
-		should(mousebind.ButtonPressFun(fn).Connect(w.wm.X, w.Id, ms.ToXGB(), false, true))
+	if ms, ok := win.wm.Config.MouseBinds["window_lower"]; ok {
+		fn := func(xu *xgbutil.XUtil, ev xevent.ButtonPressEvent) { win.Lower() }
+		should(mousebind.ButtonPressFun(fn).Connect(win.wm.X, win.Id, ms.ToXGB(), false, true))
 	}
 
-	xevent.UnmapNotifyFun(w.UnmapNotify).Connect(w.wm.X, w.Id)
-	xevent.DestroyNotifyFun(w.DestroyNotify).Connect(w.wm.X, w.Id)
-	xevent.EnterNotifyFun(w.EnterNotify).Connect(w.wm.X, w.Id)
+	xevent.UnmapNotifyFun(win.UnmapNotify).Connect(win.wm.X, win.Id)
+	xevent.DestroyNotifyFun(win.DestroyNotify).Connect(win.wm.X, win.Id)
+	xevent.EnterNotifyFun(win.EnterNotify).Connect(win.wm.X, win.Id)
 
-	should(icccm.WmStateSet(w.wm.X, w.Id, &icccm.WmState{State: uint(w.State)}))
+	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
+}
+
+func (win *Window) SendStructureNotify() {
+	LogWindowEvent(win, "Sending StructureNotify")
+	log.Printf("\tX: %d Y: %d W: %d H: %d", win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
+	ev := xproto.ConfigureNotifyEvent{
+		Event:            win.Id,
+		Window:           win.Id,
+		AboveSibling:     xevent.NoWindow,
+		X:                int16(win.Geom.X),
+		Y:                int16(win.Geom.Y),
+		Width:            uint16(win.Geom.Width),
+		Height:           uint16(win.Geom.Height),
+		BorderWidth:      1, // TODO settings
+		OverrideRedirect: false,
+	}
+	xproto.SendEvent(win.wm.X.Conn(), false, win.Id,
+		xproto.EventMaskStructureNotify, string(ev.Bytes()))
+}
+
+func (win *Window) Center() (x, y int) {
+	return win.Geom.X + win.Geom.Width/2,
+		win.Geom.Y + win.Geom.Height/2
+}
+
+func (win *Window) Screen() xrect.Rect {
+	screens := win.wm.Screens()
+	cx, cy := win.Center()
+	var screen xrect.Rect
+	for _, screen = range screens {
+		if (cx >= screen.X() && cx <= screen.X()+screen.Width()) &&
+			(cy >= screen.Y() && cy <= screen.Y()+screen.Height()) {
+			return screen
+		}
+	}
+
+	return screen
 }
 
 type WM struct {
@@ -467,35 +531,6 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	// FIXME make sure we get all the hints stuff right. i.e. set x/y/w/h if requested, call moveresize, etc
 }
 
-func LogWindowEvent(win *Window, s interface{}) {
-	log.Printf("%d (%s): %s", win.Id, win.Name(), s)
-}
-
-func printSizeHints(hints *icccm.NormalHints) {
-	log.Printf("Size hints with flags %d", hints.Flags)
-	if (hints.Flags & (icccm.SizeHintUSPosition | icccm.SizeHintPPosition)) > 1 {
-		log.Printf("\tx = %d y = %d", hints.X, hints.Y)
-	}
-	if (hints.Flags & (icccm.SizeHintUSSize | icccm.SizeHintPSize)) > 1 {
-		log.Printf("\tw = %d h = %d", hints.Width, hints.Height)
-	}
-	if (hints.Flags & icccm.SizeHintPMinSize) > 0 {
-		log.Printf("\tmw = %d mh = %d", hints.MinWidth, hints.MinHeight)
-	}
-	if (hints.Flags & icccm.SizeHintPMaxSize) > 0 {
-		log.Printf("\tMw = %d Mh = %d", hints.MaxWidth, hints.MaxHeight)
-	}
-	if (hints.Flags & icccm.SizeHintPResizeInc) > 0 {
-		log.Printf("\tiw = %d ih = %d", hints.WidthInc, hints.HeightInc)
-	}
-	if (hints.Flags & icccm.SizeHintPAspect) > 0 {
-		log.Printf("\taspect information")
-	}
-	if (hints.Flags & icccm.SizeHintPBaseSize) > 0 {
-		log.Printf("\tbw = %d bh = %d", hints.BaseWidth, hints.BaseHeight)
-	}
-}
-
 func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEvent) {
 	win := wm.GetWindow(ev.Window)
 	LogWindowEvent(win, "Configure request")
@@ -531,24 +566,6 @@ func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEven
 	)
 
 	win.SendStructureNotify()
-}
-
-func (w *Window) SendStructureNotify() {
-	LogWindowEvent(w, "Sending StructureNotify")
-	log.Printf("\tX: %d Y: %d W: %d H: %d", w.Geom.X, w.Geom.Y, w.Geom.Width, w.Geom.Height)
-	ev := xproto.ConfigureNotifyEvent{
-		Event:            w.Id,
-		Window:           w.Id,
-		AboveSibling:     xevent.NoWindow,
-		X:                int16(w.Geom.X),
-		Y:                int16(w.Geom.Y),
-		Width:            uint16(w.Geom.Width),
-		Height:           uint16(w.Geom.Height),
-		BorderWidth:      1, // TODO settings
-		OverrideRedirect: false,
-	}
-	xproto.SendEvent(w.wm.X.Conn(), false, w.Id,
-		xproto.EventMaskStructureNotify, string(ev.Bytes()))
 }
 
 func (wm *WM) CreateNotify(xu *xgbutil.XUtil, ev xevent.CreateNotifyEvent) {
@@ -603,7 +620,8 @@ func (wm *WM) QueryTree() []xproto.Window {
 
 func (wm *WM) GetWindows(states State) []*Window {
 	if states == -1 {
-		states = icccm.StateWithdrawn | icccm.StateIconic | icccm.StateNormal | icccm.StateInactive | icccm.StateZoomed
+		states = icccm.StateWithdrawn | icccm.StateIconic | icccm.StateNormal | icccm.StateInactive |
+			icccm.StateZoomed
 	}
 	var windows []*Window
 	for _, c := range wm.QueryTree() {
@@ -636,25 +654,6 @@ func (wm *WM) Screens() []xrect.Rect {
 	return heads
 }
 
-func (w *Window) Center() (x, y int) {
-	return w.Geom.X + w.Geom.Width/2,
-		w.Geom.Y + w.Geom.Height/2
-}
-
-func (w *Window) Screen() xrect.Rect {
-	screens := w.wm.Screens()
-	cx, cy := w.Center()
-	var screen xrect.Rect
-	for _, screen = range screens {
-		if (cx >= screen.X() && cx <= screen.X()+screen.Width()) &&
-			(cy >= screen.Y() && cy <= screen.Y()+screen.Height()) {
-			return screen
-		}
-	}
-
-	return screen
-}
-
 func (wm *WM) LoadCursors(mapping map[string]uint16) {
 	var err error
 	for name, cursor := range mapping {
@@ -679,7 +678,8 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	keybind.Initialize(wm.X)
 
 	wm.Root = wm.NewWindow(wm.X.RootWin())
-	xproto.ChangeWindowAttributes(wm.X.Conn(), wm.Root.Id, xproto.CwCursor, []uint32{uint32(wm.Cursors["normal"])})
+	xproto.ChangeWindowAttributes(wm.X.Conn(), wm.Root.Id, xproto.CwCursor,
+		[]uint32{uint32(wm.Cursors["normal"])})
 	for _, w := range wm.QueryTree() {
 		win := wm.NewWindow(w)
 		if win.State&(icccm.StateNormal|icccm.StateIconic) > 0 && !win.Attributes().OverrideRedirect {
@@ -688,7 +688,8 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 		}
 	}
 
-	must(wm.Root.Listen(xproto.EventMaskStructureNotify, xproto.EventMaskSubstructureNotify, xproto.EventMaskFocusChange, xproto.EventMaskSubstructureRedirect))
+	must(wm.Root.Listen(xproto.EventMaskStructureNotify, xproto.EventMaskSubstructureNotify,
+		xproto.EventMaskFocusChange, xproto.EventMaskSubstructureRedirect))
 	xevent.MapRequestFun(wm.MapRequest).Connect(xu, wm.Root.Id)
 	xevent.ConfigureRequestFun(wm.ConfigureRequest).Connect(xu, wm.Root.Id)
 	xevent.CreateNotifyFun(wm.CreateNotify).Connect(xu, wm.Root.Id)
