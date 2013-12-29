@@ -433,13 +433,16 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 		hints = &icccm.Hints{}
 	}
 	win.Init()
-	// FIXME set x and y to pointer position only if the app didn't set USPosition/PPosition
-	ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
-	if err == nil {
-		win.Geom.X = int(ptr.RootX) - win.Geom.Width/2
-		win.Geom.Y = int(ptr.RootY) - win.Geom.Height/2
-	} else {
-		log.Println("Could not get pointer position:", err)
+
+	normalHints, err := icccm.WmNormalHintsGet(xu, win.Id)
+	if err != nil || (normalHints.Flags&(icccm.SizeHintPPosition|icccm.SizeHintUSPosition) == 0) {
+		ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
+		if err == nil {
+			win.Geom.X = int(ptr.RootX) - win.Geom.Width/2
+			win.Geom.Y = int(ptr.RootY) - win.Geom.Height/2
+		} else {
+			log.Println("Could not get pointer position:", err)
+		}
 	}
 	win.move()
 	win.Map()
