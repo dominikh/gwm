@@ -82,15 +82,18 @@ func snapcalc(n0, n1, e0, e1, snapdist int) int {
 		s1 = e1 - n1
 	}
 
-	if s0 != 0 && s1 != 0 && abs(s0) < abs(s1) {
+	if s0 != 0 && s1 != 0 {
+		if abs(s0) < abs(s1) {
+			return s0
+		} else {
+			return s1
+		}
+	} else if s0 != 0 {
 		return s0
-	}
-	if s0 != 0 {
-		return s0
-	}
-	if s1 != 0 {
+	} else if s1 != 0 {
 		return s1
 	}
+
 	return 0
 }
 
