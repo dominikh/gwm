@@ -144,7 +144,7 @@ type Window struct {
 	Geom        geom
 	BorderWidth int
 	wm          *WM
-	curDrag     drag
+	curDrag     *drag
 }
 
 func (w *Window) Name() string {
@@ -207,7 +207,7 @@ func (w *Window) Lower() {
 }
 
 func (w *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
-	w.curDrag = drag{w.Geom.X, w.Geom.Y, rootX, rootY, cornerNone}
+	w.curDrag = &drag{w.Geom.X, w.Geom.Y, rootX, rootY, cornerNone}
 	w.Raise()
 	return true, w.wm.Cursors["fleur"]
 }
@@ -235,6 +235,7 @@ func (w *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 }
 
 func (w *Window) MoveEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	w.curDrag = nil
 }
 
 func (w *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
@@ -269,7 +270,7 @@ func (w *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int
 		cursorY = "top"
 	}
 
-	w.curDrag = drag{w.Geom.X, w.Geom.Y, rootX, rootY, corner}
+	w.curDrag = &drag{w.Geom.X, w.Geom.Y, rootX, rootY, corner}
 	xproto.WarpPointer(w.wm.X.Conn(), xproto.WindowNone, w.Id, 0, 0, 0, 0, int16(x), int16(y))
 	return true, w.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
 }
@@ -298,6 +299,7 @@ func (w *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int)
 }
 
 func (w *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	w.curDrag = nil
 }
 
 func (w *Window) Move(x, y int) {
@@ -488,8 +490,11 @@ func printSizeHints(hints *icccm.NormalHints) {
 
 func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEvent) {
 	win := wm.GetWindow(ev.Window)
-	LogWindowEvent(win, ev.ValueMask)
 	LogWindowEvent(win, "Configure request")
+	if win.curDrag != nil {
+		LogWindowEvent(win, "Ignoring configure request because we are in a drag")
+		return
+	}
 
 	m := ev.ValueMask
 
