@@ -1,3 +1,58 @@
+* cwm keybind commands [11/54]
+  - [ ] restart
+  - [ ] quit
+  - [X] terminal
+  - [ ] lock
+  - [ ] search
+  - [ ] menusearch
+  - [ ] exec
+  - [ ] exec_wm
+  - [ ] ssh
+  - [ ] group[n]
+  - [ ] grouponly[n]
+  - [ ] nogroup
+  - [ ] grouptoggle
+  - [ ] movetogroup[n]
+  - [ ] cyclegroup
+  - [ ] rcyclegroup
+  - [ ] cycle
+  - [ ] rcycle
+  - [ ] cycleingroup
+  - [ ] rcycleingroup
+  - [ ] delete
+  - [ ] hide
+  - [X] lower
+  - [X] raise
+  - [ ] label
+  - [ ] freeze
+  - [ ] fullscreen
+  - [ ] maximize
+  - [ ] vmaximize
+  - [ ] hmaximize
+  - [X] moveup
+  - [X] movedown
+  - [X] moveright
+  - [X] moveleft
+  - [X] bigmoveup
+  - [X] bigmovedown
+  - [X] bigmoveright
+  - [X] bigmoveleft
+  - [ ] resizeup
+  - [ ] resizedown
+  - [ ] resizeright
+  - [ ] resizeleft
+  - [ ] bigresizeup
+  - [ ] bigresizedown
+  - [ ] bigresizeright
+  - [ ] bigresizeleft
+  - [ ] ptrmoveup
+  - [ ] ptrmovedown
+  - [ ] ptrmoveright
+  - [ ] ptrmoveleft
+  - [ ] bigptrmoveup
+  - [ ] bigptrmovedown
+  - [ ] bigptrmoveright
+  - [ ] bigptrmoveleft
 * root window properties
   - [ ] _NET_SUPPORTED
   - [ ] _NET_CLIENT_LIST

@@ -782,3 +782,5 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 		}
 	},
 }
+
+// TODO watch for wm_normal_hints changes
