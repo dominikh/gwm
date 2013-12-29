@@ -446,6 +446,11 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	}
 	win.move()
 	win.Map()
+	// TODO probably should
+	// a) store the border width in every client
+	// b) use that for all calculations involving the border width
+	xproto.WarpPointer(xu.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0,
+		int16(win.Geom.Width/2-wm.Config.BorderWidth), int16(win.Geom.Height/2-wm.Config.BorderWidth))
 	if (hints.Flags & icccm.HintState) > 0 {
 		win.State = State(hints.InitialState)
 	} else {
