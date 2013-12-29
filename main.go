@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -200,11 +199,6 @@ func (w *Window) Lower() {
 	w.wm.Restack(update)
 }
 
-func (w *Window) OnLower(xu *xgbutil.XUtil, ev xevent.ButtonPressEvent) {
-	fmt.Println("OnLower")
-	w.Lower()
-}
-
 func (w *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
 	w.curDrag = drag{w.Geom.X, w.Geom.Y, rootX, rootY, cornerNone}
 	w.Raise()
@@ -378,10 +372,19 @@ func (w *Window) Init() {
 	w.SetBorderWidth(w.wm.Config.BorderWidth)
 	w.SetBorderColor(w.wm.Config.Colors["inactiveborder"])
 
-	// TODO configurable key binds
-	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-1", true, w.MoveBegin, w.MoveStep, w.MoveEnd)
-	mousebind.Drag(w.wm.X, w.Id, w.Id, "Mod1-2", true, w.ResizeBegin, w.ResizeStep, w.ResizeEnd)
-	should(mousebind.ButtonPressFun(w.OnLower).Connect(w.wm.X, w.Id, "Mod1-3", false, true))
+	if ms, ok := w.wm.Config.MouseBinds["window_move"]; ok {
+		mousebind.Drag(w.wm.X, w.Id, w.Id, ms.ToXGB(), true, w.MoveBegin, w.MoveStep, w.MoveEnd)
+	}
+
+	if ms, ok := w.wm.Config.MouseBinds["window_resize"]; ok {
+		mousebind.Drag(w.wm.X, w.Id, w.Id, ms.ToXGB(), true, w.ResizeBegin, w.ResizeStep, w.ResizeEnd)
+	}
+
+	if ms, ok := w.wm.Config.MouseBinds["window_lower"]; ok {
+		fn := func(xu *xgbutil.XUtil, ev xevent.ButtonPressEvent) { w.Lower() }
+		should(mousebind.ButtonPressFun(fn).Connect(w.wm.X, w.Id, ms.ToXGB(), false, true))
+	}
+
 	xevent.UnmapNotifyFun(w.UnmapNotify).Connect(w.wm.X, w.Id)
 	xevent.DestroyNotifyFun(w.DestroyNotify).Connect(w.wm.X, w.Id)
 	xevent.EnterNotifyFun(w.EnterNotify).Connect(w.wm.X, w.Id)

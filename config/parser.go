@@ -778,9 +778,28 @@ type KeySpec struct {
 	Mods string
 	Key  string
 }
+
 type MouseSpec struct {
 	Mods string
 	Key  string
+}
+
+func (k MouseSpec) ToXGB() string {
+	var out []string
+	for _, c := range k.Mods {
+		switch c {
+		case 'C':
+			out = append(out, "Control")
+		case 'M':
+			out = append(out, "Mod1")
+		case 'S':
+			out = append(out, "Shift")
+		case '4':
+			out = append(out, "Mod4")
+		}
+	}
+	out = append(out, k.Key)
+	return strings.Join(out, "-")
 }
 
 type Config struct {
