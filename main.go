@@ -781,6 +781,9 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 			execute(cmd)
 		}
 	},
+	"exec": func(wm *WM, ev xevent.KeyPressEvent) {
+		execute("dmenu_run")
+	},
 }
 
 // TODO watch for wm_normal_hints changes

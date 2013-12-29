@@ -1,11 +1,11 @@
-* cwm keybind commands [11/54]
+* cwm keybind commands [12/54]
   - [ ] restart
   - [ ] quit
   - [X] terminal
   - [ ] lock
   - [ ] search
   - [ ] menusearch
-  - [ ] exec
+  - [X] exec
   - [ ] exec_wm
   - [ ] ssh
   - [ ] group[n]
