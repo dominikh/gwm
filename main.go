@@ -772,6 +772,10 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"bigmoveleft":  winmovefunc(-10, 0),
 	"moveright":    winmovefunc(1, 0),
 	"bigmoveright": winmovefunc(10, 0),
+	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
+		log.Println("Restarting gwm")
+		syscall.Exec(os.Args[0], os.Args, os.Environ())
+	},
 	"terminal": func(wm *WM, ev xevent.KeyPressEvent) {
 		if cmd, ok := wm.Config.Commands["term"]; ok {
 			execute(cmd)
