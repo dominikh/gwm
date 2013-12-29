@@ -371,6 +371,7 @@ func (win *Window) Maximize(state MaximizedState) {
 	}
 	win.moveAndResizeNoReset()
 	win.maximized |= state
+	win.updateWmState()
 }
 
 func (win *Window) Unmaximize(state MaximizedState) {
@@ -390,6 +391,7 @@ func (win *Window) Unmaximize(state MaximizedState) {
 	if !win.ContainsPointer() {
 		win.CenterPointer()
 	}
+	win.updateWmState()
 }
 
 func (win *Window) ToggleMaximize(state MaximizedState) {
@@ -563,6 +565,18 @@ func (win *Window) Screen() Geometry {
 
 	geom := Geometry{X: screen.X(), Y: screen.Y(), Width: screen.Width(), Height: screen.Height()}
 	return geom
+}
+
+func (win *Window) updateWmState() {
+	var atoms []string
+	if (win.maximized & MaximizedH) > 0 {
+		atoms = append(atoms, "_NET_WM_STATE_MAXIMIZED_HORZ")
+	}
+	if (win.maximized & MaximizedV) > 0 {
+		atoms = append(atoms, "_NET_WM_STATE_MAXIMIZED_VERT")
+	}
+	// TODO other hints
+	ewmh.WmStateSet(win.X, win.Id, atoms)
 }
 
 type WM struct {
