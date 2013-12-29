@@ -156,10 +156,12 @@ const (
 
 type State int
 
-type maximizedState int
+type MaximizedState int
 
 const (
-	maximizedFull maximizedState = 1
+	MaximizedH    MaximizedState = 1
+	MaximizedV    MaximizedState = 2
+	MaximizedFull MaximizedState = 3
 )
 
 type Geom struct {
@@ -177,7 +179,7 @@ type Window struct {
 	wm          *WM
 	curDrag     *drag
 	oldGeom     Geom
-	maximized   maximizedState
+	maximized   MaximizedState
 }
 
 func (win *Window) Name() string {
@@ -347,10 +349,9 @@ func (win *Window) MoveAndResize(x, y, width, height int) {
 	win.moveAndResize()
 }
 
-func (win *Window) Maximize() {
+func (win *Window) Maximize(state MaximizedState) {
 	// TODO set wm_state to maximized(?)
-	// TODO support vmaximize and hmaximize
-	if win.maximized == maximizedFull {
+	if (win.maximized & state) > 0 {
 		return
 	}
 
@@ -359,32 +360,44 @@ func (win *Window) Maximize() {
 	// return to, or should we keep the fully unmaximized geom?
 
 	win.oldGeom = win.Geom
-	win.Geom = win.Screen()
-	win.Geom.Width -= 2 * win.wm.Config.BorderWidth
-	win.Geom.Height -= 2 * win.wm.Config.BorderWidth
+	sc := win.Screen()
+	if (state & MaximizedH) > 0 {
+		win.Geom.X = sc.X
+		win.Geom.Width = sc.Width - 2*win.wm.Config.BorderWidth
+	}
+	if (state & MaximizedV) > 0 {
+		win.Geom.Y = sc.Y
+		win.Geom.Height = sc.Height - 2*win.wm.Config.BorderWidth
+	}
 	win.moveAndResizeNoReset()
-	win.maximized = maximizedFull
+	win.maximized |= state
 }
 
-func (win *Window) Unmaximize() {
-	// TODO support vmaximize and hmaximize
-	if win.maximized == 0 {
+func (win *Window) Unmaximize(state MaximizedState) {
+	if (win.maximized & state) == 0 {
 		return
 	}
 
-	win.Geom = win.oldGeom
+	if (state & MaximizedH) > 0 {
+		win.Geom.X = win.oldGeom.X
+		win.Geom.Width = win.oldGeom.Width
+	}
+	if (state & MaximizedV) > 0 {
+		win.Geom.Y = win.oldGeom.Y
+		win.Geom.Height = win.oldGeom.Height
+	}
 	win.moveAndResize()
 	if !win.ContainsPointer() {
 		win.CenterPointer()
 	}
 }
 
-func (win *Window) ToggleMaximize() {
+func (win *Window) ToggleMaximize(state MaximizedState) {
 	// TODO support vmaximize and hmaximize
-	if win.maximized > 0 {
-		win.Unmaximize()
+	if (win.maximized & state) > 0 {
+		win.Unmaximize(state)
 	} else {
-		win.Maximize()
+		win.Maximize(state)
 	}
 }
 
@@ -407,7 +420,7 @@ func (win *Window) CenterPointer() {
 // window's maximized state.
 func (win *Window) move() {
 	win.Window.Move(win.Geom.X, win.Geom.Y)
-	win.maximized &= ^maximizedFull
+	win.maximized &= ^MaximizedFull
 	// TODO set wm_state
 }
 
@@ -415,7 +428,7 @@ func (win *Window) move() {
 // Geom. It also resets the window's maximized state.
 func (win *Window) moveAndResize() {
 	win.Window.MoveResize(win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
-	win.maximized &= ^maximizedFull
+	win.maximized &= ^MaximizedFull
 	// TODO set wm_state
 }
 
@@ -840,6 +853,15 @@ func winmovefunc(xf, yf int) func(*WM, xevent.KeyPressEvent) {
 	}
 }
 
+func winmaximizefunc(state MaximizedState) func(*WM, xevent.KeyPressEvent) {
+	return func(wm *WM, ev xevent.KeyPressEvent) {
+		if wm.CurWindow == nil {
+			return
+		}
+		wm.CurWindow.ToggleMaximize(state)
+	}
+}
+
 func winfunc(fn func(*Window)) func(*WM, xevent.KeyPressEvent) {
 	return func(wm *WM, ev xevent.KeyPressEvent) {
 		if wm.CurWindow == nil {
@@ -860,7 +882,9 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"bigmoveleft":  winmovefunc(-10, 0),
 	"moveright":    winmovefunc(1, 0),
 	"bigmoveright": winmovefunc(10, 0),
-	"maximize":     winfunc((*Window).ToggleMaximize),
+	"maximize":     winmaximizefunc(MaximizedFull),
+	"vmaximize":    winmaximizefunc(MaximizedV),
+	"hmaximize":    winmaximizefunc(MaximizedH),
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
