@@ -61,14 +61,12 @@ func should(err error) {
 	log.Println("Error:", err)
 }
 
-func subtractGaps(sc xrect.Rect, gap config.Gap) xrect.Rect {
-	// Copy into a new xrect.Rect
-	out := xrect.New(sc.Pieces())
-	out.XSet(out.X() + gap.Left)
-	out.YSet(out.Y() + gap.Top)
-	out.WidthSet(out.Width() - gap.Left - gap.Right)
-	out.HeightSet(out.Height() - gap.Top - gap.Bottom)
-	return out
+func subtractGaps(sc Geom, gap config.Gap) Geom {
+	sc.X += gap.Left
+	sc.Y += gap.Top
+	sc.Width -= gap.Left + gap.Right
+	sc.Height -= gap.Top + gap.Bottom
+	return sc
 }
 
 func snapcalc(n0, n1, e0, e1, snapdist int) int {
@@ -158,16 +156,17 @@ const (
 
 type State int
 
-type geom struct {
+type Geom struct {
 	X, Y          int
 	Width, Height int
 }
+
 type Window struct {
 	*xwindow.Window
 	State       State
 	Layer       Layer
 	Mapped      bool
-	Geom        geom
+	Geom        Geom
 	BorderWidth int
 	wm          *WM
 	curDrag     *drag
@@ -249,14 +248,10 @@ func (win *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int)
 	screen := win.Screen()
 	screen = subtractGaps(screen, win.wm.Config.Gap)
 
-	if screen == nil {
-		LogWindowEvent(win, "Could not determine screen for window")
-	} else {
-		win.Geom.X += snapcalc(win.Geom.X, win.Geom.X+win.Geom.Width+win.BorderWidth*2,
-			screen.X(), screen.X()+screen.Width(), win.wm.Config.Snapdist)
-		win.Geom.Y += snapcalc(win.Geom.Y, win.Geom.Y+win.Geom.Height+win.BorderWidth*2,
-			screen.Y(), screen.Y()+screen.Height(), win.wm.Config.Snapdist)
-	}
+	win.Geom.X += snapcalc(win.Geom.X, win.Geom.X+win.Geom.Width+win.BorderWidth*2,
+		screen.X, screen.X+screen.Width, win.wm.Config.Snapdist)
+	win.Geom.Y += snapcalc(win.Geom.Y, win.Geom.Y+win.Geom.Height+win.BorderWidth*2,
+		screen.Y, screen.Y+screen.Height, win.wm.Config.Snapdist)
 	win.move()
 }
 
@@ -459,18 +454,19 @@ func (win *Window) Center() (x, y int) {
 		win.Geom.Y + win.Geom.Height/2
 }
 
-func (win *Window) Screen() xrect.Rect {
+func (win *Window) Screen() Geom {
 	screens := win.wm.Screens()
 	cx, cy := win.Center()
 	var screen xrect.Rect
 	for _, screen = range screens {
 		if (cx >= screen.X() && cx <= screen.X()+screen.Width()) &&
 			(cy >= screen.Y() && cy <= screen.Y()+screen.Height()) {
-			return screen
+			break
 		}
 	}
 
-	return screen
+	geom := Geom{X: screen.X(), Y: screen.Y(), Width: screen.Width(), Height: screen.Height()}
+	return geom
 }
 
 type WM struct {
