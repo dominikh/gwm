@@ -977,6 +977,9 @@ func Parse(r io.Reader) (*Config, error) {
 		if command.typ == itemEOF {
 			return cfg, nil
 		}
+		if command.typ == itemTerminator {
+			continue
+		}
 		if command.typ != itemString {
 			return cfg, errors.New("unexpected token " + command.String())
 		}
