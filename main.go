@@ -461,6 +461,31 @@ func LogWindowEvent(win *Window, s interface{}) {
 	log.Printf("%d (%s): %s", win.Id, win.Name(), s)
 }
 
+func printSizeHints(hints *icccm.NormalHints) {
+	log.Printf("Size hints with flags %d", hints.Flags)
+	if (hints.Flags & (icccm.SizeHintUSPosition | icccm.SizeHintPPosition)) > 1 {
+		log.Printf("\tx = %d y = %d", hints.X, hints.Y)
+	}
+	if (hints.Flags & (icccm.SizeHintUSSize | icccm.SizeHintPSize)) > 1 {
+		log.Printf("\tw = %d h = %d", hints.Width, hints.Height)
+	}
+	if (hints.Flags & icccm.SizeHintPMinSize) > 0 {
+		log.Printf("\tmw = %d mh = %d", hints.MinWidth, hints.MinHeight)
+	}
+	if (hints.Flags & icccm.SizeHintPMaxSize) > 0 {
+		log.Printf("\tMw = %d Mh = %d", hints.MaxWidth, hints.MaxHeight)
+	}
+	if (hints.Flags & icccm.SizeHintPResizeInc) > 0 {
+		log.Printf("\tiw = %d ih = %d", hints.WidthInc, hints.HeightInc)
+	}
+	if (hints.Flags & icccm.SizeHintPAspect) > 0 {
+		log.Printf("\taspect information")
+	}
+	if (hints.Flags & icccm.SizeHintPBaseSize) > 0 {
+		log.Printf("\tbw = %d bh = %d", hints.BaseWidth, hints.BaseHeight)
+	}
+}
+
 func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEvent) {
 	win := wm.GetWindow(ev.Window)
 	LogWindowEvent(win, ev.ValueMask)
