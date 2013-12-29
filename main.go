@@ -61,7 +61,7 @@ func should(err error) {
 	log.Println("Error:", err)
 }
 
-func subtractGaps(sc Geom, gap config.Gap) Geom {
+func subtractGaps(sc Geometry, gap config.Gap) Geometry {
 	sc.X += gap.Left
 	sc.Y += gap.Top
 	sc.Width -= gap.Left + gap.Right
@@ -164,7 +164,7 @@ const (
 	MaximizedFull MaximizedState = 3
 )
 
-type Geom struct {
+type Geometry struct {
 	X, Y          int
 	Width, Height int
 }
@@ -174,11 +174,11 @@ type Window struct {
 	State       State
 	Layer       Layer
 	Mapped      bool
-	Geom        Geom
+	Geom        Geometry
 	BorderWidth int
 	wm          *WM
 	curDrag     *drag
-	oldGeom     Geom
+	oldGeom     Geometry
 	maximized   MaximizedState
 }
 
@@ -550,7 +550,7 @@ func (win *Window) Center() (x, y int) {
 		win.Geom.Y + win.Geom.Height/2
 }
 
-func (win *Window) Screen() Geom {
+func (win *Window) Screen() Geometry {
 	screens := win.wm.Screens()
 	cx, cy := win.Center()
 	var screen xrect.Rect
@@ -561,7 +561,7 @@ func (win *Window) Screen() Geom {
 		}
 	}
 
-	geom := Geom{X: screen.X(), Y: screen.Y(), Width: screen.Width(), Height: screen.Height()}
+	geom := Geometry{X: screen.X(), Y: screen.Y(), Width: screen.Width(), Height: screen.Height()}
 	return geom
 }
 
