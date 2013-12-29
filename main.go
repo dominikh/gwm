@@ -706,7 +706,11 @@ func (wm *WM) NewWindow(c xproto.Window) *Window {
 }
 
 func (wm *WM) GetWindow(c xproto.Window) *Window {
-	return wm.Windows[c]
+	if win, ok := wm.Windows[c]; ok {
+		return win
+	}
+	log.Printf("Tried to get window %d that doesn't exist yet", c)
+	return wm.NewWindow(c)
 }
 
 func (wm *WM) QueryTree() []xproto.Window {
