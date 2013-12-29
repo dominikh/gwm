@@ -709,7 +709,12 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 }
 
 func main() {
-	f, _ := os.Open("./cwmrc")
+	log.Println("Starting gwm")
+	p := "./cwmrc"
+	if len(os.Args) > 1 {
+		p = os.Args[1]
+	}
+	f, _ := os.Open(p)
 	cfg, err := config.Parse(f)
 	if err != nil {
 		panic(err)
