@@ -485,8 +485,8 @@ func (win *Window) Init() {
 	// TODO do something if the state is iconified
 	// TODO set the window's layer
 	LogWindowEvent(win, "Initializing")
-	should(win.Listen(xproto.EventMaskEnterWindow, xproto.EventMaskFocusChange,
-		xproto.EventMaskStructureNotify, xproto.EventMaskPointerMotion))
+	should(win.Listen(xproto.EventMaskEnterWindow,
+		xproto.EventMaskStructureNotify))
 	win.SetBorderWidth(win.wm.Config.BorderWidth)
 	win.SetBorderColor(win.wm.Config.Colors["inactiveborder"])
 
