@@ -355,7 +355,7 @@ func (win *Window) Maximize(state MaximizedState) {
 		win.oldGeom = win.Geom
 	}
 
-	sc := win.Screen()
+	sc := subtractGaps(win.Screen(), win.wm.Config.Gap)
 	if (state & MaximizedH) > 0 {
 		win.Geom.X = sc.X
 		win.Geom.Width = sc.Width - 2*win.wm.Config.BorderWidth
