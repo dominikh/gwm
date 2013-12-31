@@ -171,15 +171,17 @@ type Geometry struct {
 
 type Window struct {
 	*xwindow.Window
-	State       State
-	Layer       Layer
-	Mapped      bool
-	Geom        Geometry
-	BorderWidth int
-	wm          *WM
-	curDrag     *drag
-	oldGeom     Geometry
-	maximized   MaximizedState
+	State            State
+	Layer            Layer
+	Mapped           bool
+	Geom             Geometry
+	BorderWidth      int
+	wm               *WM
+	curDrag          *drag
+	unmaximizedGeom  Geometry
+	unfullscreenGeom Geometry
+	maximized        MaximizedState
+	fullscreen       bool
 }
 
 func (win *Window) Name() string {
@@ -349,10 +351,48 @@ func (win *Window) MoveAndResize(x, y, width, height int) {
 	win.moveAndResize()
 }
 
+func (win *Window) Fullscreen() {
+	// TODO should fullscreen windows be frozen? probably.
+	if win.fullscreen {
+		return
+	}
+
+	sc := win.Screen()
+	win.unfullscreenGeom = win.Geom
+	win.SetBorderWidth(0)
+	win.Geom.X = sc.X
+	win.Geom.Y = sc.Y
+	win.Geom.Width = sc.Width
+	win.Geom.Height = sc.Height
+	win.moveAndResizeNoReset()
+	win.fullscreen = true
+	win.updateWmState()
+}
+
+func (win *Window) Unfullscreen() {
+	if !win.fullscreen {
+		return
+	}
+
+	win.Geom = win.unfullscreenGeom
+	win.SetBorderWidth(win.wm.Config.BorderWidth)
+	win.moveAndResizeNoReset()
+	win.fullscreen = false
+	win.updateWmState()
+}
+
+func (win *Window) ToggleFullscreen() {
+	if win.fullscreen {
+		win.Unfullscreen()
+	} else {
+		win.Fullscreen()
+	}
+}
+
 func (win *Window) Maximize(state MaximizedState) {
 	// Only store the geometry if we're not maximized at all yet
 	if win.maximized == 0 {
-		win.oldGeom = win.Geom
+		win.unmaximizedGeom = win.Geom
 	}
 
 	sc := subtractGaps(win.Screen(), win.wm.Config.Gap)
@@ -371,12 +411,12 @@ func (win *Window) Maximize(state MaximizedState) {
 
 func (win *Window) Unmaximize(state MaximizedState) {
 	if (state & MaximizedH) > 0 {
-		win.Geom.X = win.oldGeom.X
-		win.Geom.Width = win.oldGeom.Width
+		win.Geom.X = win.unmaximizedGeom.X
+		win.Geom.Width = win.unmaximizedGeom.Width
 	}
 	if (state & MaximizedV) > 0 {
-		win.Geom.Y = win.oldGeom.Y
-		win.Geom.Height = win.oldGeom.Height
+		win.Geom.Y = win.unmaximizedGeom.Y
+		win.Geom.Height = win.unmaximizedGeom.Height
 	}
 	win.moveAndResize()
 	if !win.ContainsPointer() {
@@ -565,6 +605,9 @@ func (win *Window) updateWmState() {
 	}
 	if (win.maximized & MaximizedV) > 0 {
 		atoms = append(atoms, "_NET_WM_STATE_MAXIMIZED_VERT")
+	}
+	if win.fullscreen {
+		atoms = append(atoms, "_NET_WM_STATE_FULLSCREEN")
 	}
 	// TODO other hints
 	ewmh.WmStateSet(win.X, win.Id, atoms)
@@ -894,6 +937,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"maximize":     winmaximizefunc(MaximizedFull),
 	"vmaximize":    winmaximizefunc(MaximizedV),
 	"hmaximize":    winmaximizefunc(MaximizedH),
+	"fullscreen":   winfunc((*Window).ToggleFullscreen),
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
