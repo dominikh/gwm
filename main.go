@@ -513,6 +513,10 @@ func (win *Window) moveAndResizeNoReset() {
 
 func (win *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
 	LogWindowEvent(win, "Enter")
+	win.markActive()
+}
+
+func (win *Window) markActive() {
 	if win == win.wm.CurWindow {
 		return
 	}
@@ -983,12 +987,20 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	wm.Root = wm.NewWindow(wm.X.RootWin())
 	xproto.ChangeWindowAttributes(wm.X.Conn(), wm.Root.Id, xproto.CwCursor,
 		[]uint32{uint32(wm.Cursors["normal"])})
+	var toMark *Window
 	for _, w := range wm.QueryTree() {
 		win := wm.NewWindow(w)
 		if win.State&(icccm.StateNormal|icccm.StateIconic) > 0 && !win.Attributes().OverrideRedirect {
 			// FIXME note initial geometry for existing clients
 			win.Init()
+			if win.ContainsPointer() {
+				toMark = win
+			}
 		}
+	}
+
+	if toMark != nil {
+		toMark.markActive()
 	}
 
 	must(wm.Root.Listen(xproto.EventMaskStructureNotify, xproto.EventMaskSubstructureNotify,
