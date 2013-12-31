@@ -1062,3 +1062,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 }
 
 // TODO watch for wm_normal_hints changes
+// TODO honor aspect ratio when resizing
+// TODO remove wm_state when withdrawing
+// TODO unset _NET_DESKTOP_NAMES
+// TODO set allowed actions
