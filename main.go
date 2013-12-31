@@ -632,7 +632,67 @@ func (win *Window) ClientMessage(xu *xgbutil.XUtil, ev xevent.ClientMessageEvent
 
 		win.handleState(prop1, data)
 		win.handleState(prop2, data)
+	case "_NET_CLOSE_WINDOW":
+		win.Delete()
+	default:
+		LogWindowEvent(win, "Unknown ClientMessage: "+name)
 	}
+}
+
+func (win *Window) Delete() {
+	if !win.wmDeleteWindow() {
+		win.Kill()
+	}
+}
+
+func (win *Window) wmDeleteWindow() bool {
+	if !win.SupportsWmDeleteWindow() {
+		return false
+	}
+
+	wm_protocols, err := xprop.Atm(win.wm.X, "WM_PROTOCOLS")
+	if err != nil {
+		LogWindowEvent(win, err)
+		return false
+	}
+
+	wm_del_win, err := xprop.Atm(win.wm.X, "WM_DELETE_WINDOW")
+	if err != nil {
+		LogWindowEvent(win, err)
+		return false
+	}
+
+	cm, err := xevent.NewClientMessage(32, win.Id, wm_protocols, int(wm_del_win))
+	if err != nil {
+		LogWindowEvent(win, err)
+		return false
+	}
+
+	err = xproto.SendEventChecked(win.wm.X.Conn(), false, win.Id, 0, string(cm.Bytes())).Check()
+	if err != nil {
+		LogWindowEvent(win, err)
+		return false
+	}
+
+	return true
+}
+
+func (win *Window) Protocols() []string {
+	protocols, err := icccm.WmProtocolsGet(win.wm.X, win.Id)
+	if err != nil {
+		LogWindowEvent(win, "Could not query WM_PROTOCOLS")
+		return nil
+	}
+	return protocols
+}
+
+func (win *Window) SupportsWmDeleteWindow() bool {
+	for _, p := range win.Protocols() {
+		if p == "WM_DELETE_WINDOW" {
+			return true
+		}
+	}
+	return false
 }
 
 func (win *Window) handleState(prop string, data []uint32) {
@@ -1145,6 +1205,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"freeze":       winfunc((*Window).ToggleFreeze),
 	"above":        winlayerfunc(LayerAbove),
 	"below":        winlayerfunc(LayerBelow),
+	"delete":       winfunc((*Window).Delete),
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())

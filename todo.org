@@ -1,4 +1,4 @@
-* cwm keybind commands [18/54]
+* cwm keybind commands [19/54]
   - [X] restart
   - [ ] quit
   - [X] terminal
@@ -19,7 +19,7 @@
   - [ ] rcycle
   - [ ] cycleingroup
   - [ ] rcycleingroup
-  - [ ] delete
+  - [X] delete
   - [ ] hide
   - [X] lower
   - [X] raise
@@ -70,7 +70,7 @@
   - [ ] _NET_VIRTUAL_ROOTS
   - [ ] _NET_SHOWING_DESKTOP
 * root window messages
-  - [ ] _NET_CLOSE_WINDOW
+  - [X] _NET_CLOSE_WINDOW
   - [ ] _NET_MOVERESIZE_WINDOW
   - [ ] _NET_WM_MOVERESIZE
   - [ ] _NET_RESTACK_WINDOW
