@@ -1,5 +1,15 @@
 package main
 
+/*
+Notes
+
+This is a list of things that I don't want to forget because they
+tripped me up:
+
+- xgb/xgbutil seems to dispatch ClientMessage events to the window it
+  was targetted at, not the root window it was actually sent to
+
+*/
 import (
 	"log"
 	"os"
@@ -15,6 +25,7 @@ import (
 	"github.com/BurntSushi/xgbutil/xcursor"
 	"github.com/BurntSushi/xgbutil/xevent"
 	"github.com/BurntSushi/xgbutil/xinerama"
+	"github.com/BurntSushi/xgbutil/xprop"
 	"github.com/BurntSushi/xgbutil/xrect"
 	"github.com/BurntSushi/xgbutil/xwindow"
 
@@ -556,8 +567,82 @@ func (win *Window) Init() {
 	xevent.UnmapNotifyFun(win.UnmapNotify).Connect(win.wm.X, win.Id)
 	xevent.DestroyNotifyFun(win.DestroyNotify).Connect(win.wm.X, win.Id)
 	xevent.EnterNotifyFun(win.EnterNotify).Connect(win.wm.X, win.Id)
+	xevent.ClientMessageFun(win.ClientMessage).Connect(win.wm.X, win.Id)
 
 	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
+}
+
+func (win *Window) ClientMessage(xu *xgbutil.XUtil, ev xevent.ClientMessageEvent) {
+	name, err := xprop.AtomName(xu, ev.Type)
+	if err != nil {
+		log.Printf("Could not map atom %v to name", ev.Type)
+		return
+	}
+	data := ev.Data.Data32
+	switch name {
+	case "_NET_WM_STATE":
+		prop1, err1 := xprop.AtomName(win.wm.X, xproto.Atom(data[1]))
+		prop2, err2 := xprop.AtomName(win.wm.X, xproto.Atom(data[2]))
+		if err1 != nil {
+			prop1 = ""
+		}
+		if err2 != nil {
+			prop2 = ""
+		}
+
+		win.handleState(prop1, data)
+		win.handleState(prop2, data)
+	}
+}
+
+func (win *Window) handleState(prop string, data []uint32) {
+	switch data[0] {
+	case 0:
+		win.removeState(prop)
+	case 1:
+		win.addState(prop)
+	case 2:
+		win.toggleState(prop)
+	}
+}
+
+func (win *Window) removeState(prop string) {
+	switch prop {
+	case "_NET_WM_STATE_FULLSCREEN":
+		win.Unfullscreen()
+	case "_NET_WM_STATE_MAXIMIZED_HORZ":
+		win.Unmaximize(MaximizedH)
+	case "_NET_WM_STATE_MAXIMIZED_VERT":
+		win.Unmaximize(MaximizedV)
+	default:
+		LogWindowEvent(win, "Unknown _NET_WM_STATE: "+prop)
+	}
+}
+
+func (win *Window) addState(prop string) {
+	switch prop {
+	case "_NET_WM_STATE_FULLSCREEN":
+		win.Fullscreen()
+	case "_NET_WM_STATE_MAXIMIZED_HORZ":
+		win.Maximize(MaximizedH)
+	case "_NET_WM_STATE_MAXIMIZED_VERT":
+		win.Maximize(MaximizedV)
+	default:
+		LogWindowEvent(win, "Unknown _NET_WM_STATE: "+prop)
+	}
+}
+
+func (win *Window) toggleState(prop string) {
+	switch prop {
+	case "_NET_WM_STATE_FULLSCREEN":
+		win.ToggleFullscreen()
+	case "_NET_WM_STATE_MAXIMIZED_HORZ":
+		win.ToggleMaximize(MaximizedH)
+	case "_NET_WM_STATE_MAXIMIZED_VERT":
+		win.ToggleMaximize(MaximizedV)
+	default:
+		LogWindowEvent(win, "Unknown _NET_WM_STATE: "+prop)
+	}
 }
 
 func (win *Window) SendStructureNotify() {
