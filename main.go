@@ -558,6 +558,8 @@ func (win *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
 	LogWindowEvent(win, "Unmapping")
 	win.Mapped = false
 	win.Detach()
+	// Reattach DestroyNotify, because we still need that one
+	xevent.DestroyNotifyFun(win.DestroyNotify).Connect(win.wm.X, win.Id)
 	win.State = icccm.StateIconic
 	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
 }
