@@ -1,5 +1,5 @@
-* cwm keybind commands [17/54]
-  - [ ] restart
+* cwm keybind commands [18/54]
+  - [X] restart
   - [ ] quit
   - [X] terminal
   - [ ] lock
