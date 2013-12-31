@@ -489,7 +489,7 @@ func (win *Window) CenterPointer() {
 func (win *Window) move() {
 	win.Window.Move(win.Geom.X, win.Geom.Y)
 	win.maximized &= ^MaximizedFull
-	// TODO set wm_state
+	win.updateWmState()
 }
 
 // moveAndResize moves and resizes the window based on its current
@@ -497,7 +497,7 @@ func (win *Window) move() {
 func (win *Window) moveAndResize() {
 	win.Window.MoveResize(win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
 	win.maximized &= ^MaximizedFull
-	// TODO set wm_state
+	win.updateWmState()
 }
 
 // move moves the window based on its current Geom.
