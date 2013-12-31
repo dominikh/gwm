@@ -399,6 +399,7 @@ func (win *Window) Fullscreen() {
 	win.Freeze()
 	win.unfullscreenLayer = win.Layer
 	win.SetLayer(LayerAbove)
+	win.Raise()
 	win.updateWmState()
 }
 
