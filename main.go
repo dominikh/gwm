@@ -946,6 +946,21 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	should(ewmh.NumberOfDesktopsSet(wm.X, 1))
 	should(ewmh.CurrentDesktopSet(wm.X, 0))
 	should(ewmh.DesktopViewportSet(wm.X, nil))
+	should(ewmh.SupportedSet(wm.X, []string{
+		"_NET_SUPPORTED",
+		"_NET_NUMBER_OF_DESKTOPS",
+		"_NET_CURRENT_DESKTOP",
+		"_NET_SUPPORTING_WM_CHECK",
+		"_NET_WM_NAME",
+		"_NET_WM_STATE",
+		"_NET_WM_STATE_MAXIMIZED_VERT",
+		"_NET_WM_STATE_MAXIMIZED_HORZ",
+		"_NET_WM_STATE_FULLSCREEN",
+		"_NET_WM_ALLOWED_ACTIONS",
+		"_NET_WM_ACTION_FULLSCREEN",
+		"_NET_WM_ACTION_MAXIMIZE_VERT",
+		"_NET_WM_ACTION_MAXIMIZE_HORZ",
+	}))
 
 	win, err := xwindow.Create(wm.X, wm.Root.Id)
 	must(err)
