@@ -1,4 +1,4 @@
-* cwm keybind commands [16/54]
+* cwm keybind commands [17/54]
   - [ ] restart
   - [ ] quit
   - [X] terminal
@@ -24,7 +24,7 @@
   - [X] lower
   - [X] raise
   - [ ] label
-  - [ ] freeze
+  - [X] freeze
   - [X] fullscreen
   - [X] maximize
   - [X] vmaximize

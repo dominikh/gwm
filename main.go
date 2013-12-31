@@ -193,6 +193,7 @@ type Window struct {
 	unfullscreenGeom Geometry
 	maximized        MaximizedState
 	fullscreen       bool
+	frozen           bool
 }
 
 func (win *Window) Name() string {
@@ -255,12 +256,15 @@ func (win *Window) Lower() {
 }
 
 func (win *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
-	win.curDrag = &drag{win.Geom.X, win.Geom.Y, rootX, rootY, cornerNone}
 	win.Raise()
+	win.curDrag = &drag{win.Geom.X, win.Geom.Y, rootX, rootY, cornerNone}
 	return true, win.wm.Cursors["fleur"]
 }
 
 func (win *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	if win.frozen {
+		return
+	}
 	dx := rootX - win.curDrag.offsetX
 	dy := rootY - win.curDrag.offsetY
 
@@ -320,6 +324,9 @@ func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY i
 }
 
 func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	if win.frozen {
+		return
+	}
 	// FIXME consider size hints
 	if (win.curDrag.corner & cornerW) > 0 {
 		win.Geom.Width += win.Geom.X - rootX + win.wm.Config.BorderWidth
@@ -362,8 +369,19 @@ func (win *Window) MoveAndResize(x, y, width, height int) {
 	win.moveAndResize()
 }
 
+func (win *Window) Freeze() {
+	win.frozen = true
+}
+
+func (win *Window) Unfreeze() {
+	win.frozen = false
+}
+
+func (win *Window) ToggleFreeze() {
+	win.frozen = !win.frozen
+}
+
 func (win *Window) Fullscreen() {
-	// TODO should fullscreen windows be frozen? probably.
 	if win.fullscreen {
 		return
 	}
@@ -377,6 +395,7 @@ func (win *Window) Fullscreen() {
 	win.Geom.Height = sc.Height
 	win.moveAndResizeNoReset()
 	win.fullscreen = true
+	win.Freeze()
 	win.updateWmState()
 }
 
@@ -389,6 +408,7 @@ func (win *Window) Unfullscreen() {
 	win.SetBorderWidth(win.wm.Config.BorderWidth)
 	win.moveAndResizeNoReset()
 	win.fullscreen = false
+	win.Unfreeze()
 	win.updateWmState()
 }
 
@@ -1047,6 +1067,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"vmaximize":    winmaximizefunc(MaximizedV),
 	"hmaximize":    winmaximizefunc(MaximizedH),
 	"fullscreen":   winfunc((*Window).ToggleFullscreen),
+	"freeze":       winfunc((*Window).ToggleFreeze),
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
