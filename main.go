@@ -551,6 +551,15 @@ func (win *Window) Init() {
 		win.Geom.Height = int(attr.Height)
 	}
 
+	states, err := ewmh.WmStateGet(win.X, win.Id)
+	if err != nil {
+		LogWindowEvent(win, "Could not get _NET_WM_STATE")
+	} else {
+		for _, state := range states {
+			win.addState(state)
+		}
+	}
+
 	if ms, ok := win.wm.Config.MouseBinds["window_move"]; ok {
 		mousebind.Drag(win.wm.X, win.Id, win.Id, ms.ToXGB(), true, win.MoveBegin, win.MoveStep, win.MoveEnd)
 	}
@@ -733,7 +742,7 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 			log.Println("Could not get pointer position:", err)
 		}
 	}
-	// TODO read the current wm_state and determine if we're maximized
+
 	win.moveNoReset()
 	win.Map()
 	// TODO probably should
