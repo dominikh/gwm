@@ -182,18 +182,19 @@ type Geometry struct {
 
 type Window struct {
 	*xwindow.Window
-	State            State
-	Layer            Layer
-	Mapped           bool
-	Geom             Geometry
-	BorderWidth      int
-	wm               *WM
-	curDrag          *drag
-	unmaximizedGeom  Geometry
-	unfullscreenGeom Geometry
-	maximized        MaximizedState
-	fullscreen       bool
-	frozen           bool
+	State             State
+	Layer             Layer
+	Mapped            bool
+	Geom              Geometry
+	BorderWidth       int
+	wm                *WM
+	curDrag           *drag
+	unmaximizedGeom   Geometry
+	unfullscreenGeom  Geometry
+	maximized         MaximizedState
+	fullscreen        bool
+	unfullscreenLayer Layer
+	frozen            bool
 }
 
 func (win *Window) Name() string {
@@ -396,6 +397,8 @@ func (win *Window) Fullscreen() {
 	win.moveAndResizeNoReset()
 	win.fullscreen = true
 	win.Freeze()
+	win.unfullscreenLayer = win.Layer
+	win.SetLayer(LayerAbove)
 	win.updateWmState()
 }
 
@@ -409,6 +412,7 @@ func (win *Window) Unfullscreen() {
 	win.moveAndResizeNoReset()
 	win.fullscreen = false
 	win.Unfreeze()
+	win.SetLayer(win.unfullscreenLayer)
 	win.updateWmState()
 }
 
@@ -554,7 +558,6 @@ func (win *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
 
 func (win *Window) Init() {
 	// TODO do something if the state is iconified
-	// TODO set the window's layer
 	LogWindowEvent(win, "Initializing")
 	should(win.Listen(xproto.EventMaskEnterWindow,
 		xproto.EventMaskStructureNotify))
@@ -643,6 +646,8 @@ func (win *Window) removeState(prop string) {
 		win.Unmaximize(MaximizedH)
 	case "_NET_WM_STATE_MAXIMIZED_VERT":
 		win.Unmaximize(MaximizedV)
+	case "_NET_WM_STATE_ABOVE", "_NET_WM_STATE_BELOW":
+		win.SetLayer(LayerNormal)
 	default:
 		LogWindowEvent(win, "Unknown _NET_WM_STATE: "+prop)
 	}
@@ -656,6 +661,10 @@ func (win *Window) addState(prop string) {
 		win.Maximize(MaximizedH)
 	case "_NET_WM_STATE_MAXIMIZED_VERT":
 		win.Maximize(MaximizedV)
+	case "_NET_WM_STATE_ABOVE":
+		win.SetLayer(LayerAbove)
+	case "_NET_WM_STATE_BELOW":
+		win.SetLayer(LayerBelow)
 	default:
 		LogWindowEvent(win, "Unknown _NET_WM_STATE: "+prop)
 	}
@@ -669,9 +678,39 @@ func (win *Window) toggleState(prop string) {
 		win.ToggleMaximize(MaximizedH)
 	case "_NET_WM_STATE_MAXIMIZED_VERT":
 		win.ToggleMaximize(MaximizedV)
+	case "_NET_WM_STATE_ABOVE":
+		if win.Layer == LayerAbove {
+			win.SetLayer(LayerNormal)
+		} else {
+			win.SetLayer(LayerAbove)
+		}
+	case "_NET_WM_STATE_BELOW":
+		if win.Layer == LayerAbove {
+			win.SetLayer(LayerNormal)
+		} else {
+			win.SetLayer(LayerBelow)
+		}
 	default:
 		LogWindowEvent(win, "Unknown _NET_WM_STATE: "+prop)
 	}
+}
+
+func (win *Window) SetLayer(layer Layer) {
+	// TODO should we unexport the Layer field and provide a getter?
+	win.Layer = layer
+	win.updateWmState()
+	windows := make(map[Layer][]*Window)
+	for _, ow := range win.wm.GetWindows(icccm.StateNormal) {
+		windows[ow.Layer] = append(windows[ow.Layer], ow)
+	}
+
+	var update []*Window
+	for layer := LayerDesktop; layer <= LayerAbove; layer++ {
+		for _, ow := range windows[layer] {
+			update = append(update, ow)
+		}
+	}
+	win.wm.Restack(update)
 }
 
 func (win *Window) SendStructureNotify() {
@@ -722,6 +761,12 @@ func (win *Window) updateWmState() {
 	}
 	if win.fullscreen {
 		atoms = append(atoms, "_NET_WM_STATE_FULLSCREEN")
+	}
+	if win.Layer == LayerAbove {
+		atoms = append(atoms, "_NET_WM_STATE_ABOVE")
+	}
+	if win.Layer == LayerBelow {
+		atoms = append(atoms, "_NET_WM_STATE_BELOW")
 	}
 	// TODO other hints
 	ewmh.WmStateSet(win.X, win.Id, atoms)
@@ -1052,6 +1097,20 @@ func winfunc(fn func(*Window)) func(*WM, xevent.KeyPressEvent) {
 	}
 }
 
+func winlayerfunc(layer Layer) func(*WM, xevent.KeyPressEvent) {
+	return func(wm *WM, ev xevent.KeyPressEvent) {
+		if wm.CurWindow == nil {
+			return
+		}
+		win := wm.CurWindow
+		if win.Layer == layer {
+			win.SetLayer(LayerNormal)
+		} else {
+			win.SetLayer(layer)
+		}
+	}
+}
+
 var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"lower":        winfunc((*Window).Lower),
 	"raise":        winfunc((*Window).Raise),
@@ -1068,6 +1127,8 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"hmaximize":    winmaximizefunc(MaximizedH),
 	"fullscreen":   winfunc((*Window).ToggleFullscreen),
 	"freeze":       winfunc((*Window).ToggleFreeze),
+	"above":        winlayerfunc(LayerAbove),
+	"below":        winlayerfunc(LayerBelow),
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
