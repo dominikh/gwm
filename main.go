@@ -472,11 +472,12 @@ func (win *Window) ToggleMaximize(state MaximizedState) {
 func (win *Window) ContainsPointer() bool {
 	ptr, err := xproto.QueryPointer(win.wm.X.Conn(), win.wm.Root.Id).Reply()
 	if err != nil {
+		log.Println("Could not query pointer position:", err)
 		return false
 	}
 	px, py := int(ptr.RootX), int(ptr.RootY)
 	return !(px < win.Geom.X || px > win.Geom.X+win.Geom.Width ||
-		py < win.Geom.Y || py > win.Geom.Y+win.Geom.Y)
+		py < win.Geom.Y || py > win.Geom.Y+win.Geom.Height)
 }
 
 func (win *Window) CenterPointer() {
