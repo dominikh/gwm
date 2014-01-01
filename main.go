@@ -1176,7 +1176,7 @@ func execute(bin string) error {
 		log.Printf("Could not execute %q", bin)
 		return err
 	}
-	cmd.Process.Release()
+	go func() { cmd.Process.Wait() }()
 	return nil
 }
 
