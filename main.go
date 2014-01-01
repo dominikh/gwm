@@ -1158,7 +1158,8 @@ func main() {
 		panic(err)
 	}
 	wm := &WM{
-		Config:  cfg,
+		Config: cfg,
+		// FIXME all of the make() stuff should be in the Init() method
 		Cursors: make(map[string]xproto.Cursor),
 		Windows: make(map[xproto.Window]*Window),
 	}

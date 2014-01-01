@@ -245,9 +245,10 @@ func (m *Menu) Show() *xwindow.Window {
 
 func (m *Menu) Wait() (Entry, bool) {
 	ret, ok := <-m.ch
-	// TODO unmap/destroy window
 	m.win.Unmap()
-	m.win.Destroy()
+	// We cannot use xgbutil's Destroy() method because that will
+	// detach all events, including DestroyNotify that our WM needs
+	xproto.DestroyWindow(m.xu.Conn(), m.win.Id)
 	return ret, ok
 }
 
