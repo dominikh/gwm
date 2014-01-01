@@ -1,5 +1,8 @@
 package menu
 
+// TODO part of this, the drawing bit, will probably have to go in a
+// different package, so we can use it to draw resize information
+
 // FIXME get rid of all panics
 // FIXME reorder code
 // FIXME clean code up
@@ -34,7 +37,6 @@ type Entry struct {
 
 type Menu struct {
 	xu             *xgbutil.XUtil
-	parent         xproto.Window
 	x              int
 	y              int
 	width          int
@@ -54,7 +56,7 @@ type Menu struct {
 	input          string
 	longestEntry   int
 	filterFn       FilterFunc
-	ch             chan (Entry)
+	ch             chan Entry
 }
 
 // TODO document that input slice mustn't be modified
@@ -66,7 +68,6 @@ func New(xu *xgbutil.XUtil, title string, cfg Config) *Menu {
 
 	m := &Menu{
 		xu:        xu,
-		parent:    xu.RootWin(),
 		title:     title,
 		y:         cfg.Y,
 		x:         cfg.X,
@@ -92,14 +93,11 @@ func New(xu *xgbutil.XUtil, title string, cfg Config) *Menu {
 	if err != nil {
 		panic(err)
 	}
-	m.fontAscent = ex.FontAscent // + ex.FontDescent
+	m.fontAscent = ex.FontAscent
 	m.fontDescent = ex.FontDescent
 
 	return m
 }
-
-// TODO part of this, the drawing bit, will probably have to go in a
-// different package, so we can use it to draw resize information
 
 func FilterPrefix(entries []Entry, prompt string) []Entry {
 	if prompt == "" {
@@ -115,9 +113,8 @@ func FilterPrefix(entries []Entry, prompt string) []Entry {
 	return out
 }
 
-// TODO document that elements must be sorted
-
 func (m *Menu) SetEntries(entries []Entry) {
+	// TODO document that elements must be sorted
 	m.entries = entries
 	m.filter()
 }
@@ -155,7 +152,7 @@ func (m *Menu) filter() {
 
 func (m *Menu) Show() *xwindow.Window {
 	var err error
-	m.win, err = xwindow.Create(m.xu, m.parent)
+	m.win, err = xwindow.Create(m.xu, m.xu.RootWin())
 	if err != nil {
 		panic(err)
 	}
