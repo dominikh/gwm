@@ -632,11 +632,6 @@ func (win *Window) Init() {
 		should(mousebind.ButtonPressFun(fn).Connect(win.wm.X, win.Id, ms.ToXGB(), false, true))
 	}
 
-	xevent.UnmapNotifyFun(win.UnmapNotify).Connect(win.wm.X, win.Id)
-	xevent.DestroyNotifyFun(win.DestroyNotify).Connect(win.wm.X, win.Id)
-	xevent.EnterNotifyFun(win.EnterNotify).Connect(win.wm.X, win.Id)
-	xevent.ClientMessageFun(win.ClientMessage).Connect(win.wm.X, win.Id)
-
 	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
 }
 
@@ -1000,6 +995,12 @@ func (wm *WM) NewWindow(c xproto.Window) *Window {
 		win.Mapped = true
 		win.State = icccm.StateNormal
 	}
+
+	xevent.UnmapNotifyFun(win.UnmapNotify).Connect(win.wm.X, win.Id)
+	xevent.DestroyNotifyFun(win.DestroyNotify).Connect(win.wm.X, win.Id)
+	xevent.EnterNotifyFun(win.EnterNotify).Connect(win.wm.X, win.Id)
+	xevent.ClientMessageFun(win.ClientMessage).Connect(win.wm.X, win.Id)
+
 	return win
 }
 
