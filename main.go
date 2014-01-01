@@ -1243,6 +1243,11 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"above":        winlayerfunc(LayerAbove),
 	"below":        winlayerfunc(LayerBelow),
 	"delete":       winfunc((*Window).Delete),
+	"debug": func(wm *WM, ev xevent.KeyPressEvent) {
+		log.Println("START DEBUG")
+		log.Printf("- Managing %d windows", len(wm.Windows))
+		log.Println("END DEBUG")
+	},
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
