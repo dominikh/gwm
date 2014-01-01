@@ -282,17 +282,13 @@ func (m *Menu) prompt() string {
 }
 
 func (m *Menu) draw() {
-	// FIXME fix the fact that the window is sometimes a bit wider than the prompt
-	err := xproto.FillPolyChecked(m.xu.Conn(), xproto.Drawable(m.win.Id), m.gcI, xproto.FillStyleSolid,
-		xproto.CoordModeOrigin, []xproto.Point{{0, 0}, {0, 200}, {200, 200}, {200, 0}}).Check()
-	if err != nil {
-		panic(err)
-	}
+	xproto.PolyFillRectangle(m.xu.Conn(), xproto.Drawable(m.win.Id), m.gcI,
+		[]xproto.Rectangle{{0, 0, uint16(m.width), uint16(m.height)}})
 
 	r := pad([]rune(m.prompt()), m.longestEntry)
 	chars, n := toChar2b(r)
 	nextY := int16(0)
-	err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0,
+	err := xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0,
 		nextY+m.fontAscent, chars).Check()
 	if err != nil {
 		panic(err)
