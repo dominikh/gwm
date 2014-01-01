@@ -265,6 +265,8 @@ func toChar2b(runes []rune) ([]xproto.Char2b, int) {
 }
 
 func pad(r []rune, l int) []rune {
+	// FIXME for some entries, this doesn't seem to work correctly,
+	// investigate...
 	if len(r) < l {
 		for i := len(r); i <= l; i++ {
 			r = append(r, ' ')
@@ -284,31 +286,38 @@ func (m *Menu) draw() {
 
 	r := pad([]rune(m.prompt()), m.longestEntry)
 	chars, n := toChar2b(r)
-	nextY := int16(0)
 	err := xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0,
-		nextY+m.fontAscent, chars).Check()
+		m.fontAscent, chars).Check()
 	if err != nil {
 		panic(err)
 	}
-	nextY += m.fontAscent + m.fontDescent
 
-	for i, entry := range m.displayEntries[m.active:] {
-		if int(nextY) >= m.height {
-			break
-		}
+	if len(m.displayEntries) == 0 {
+		return
+	}
+	idx := m.active
+	num := m.height/int(m.fontAscent+m.fontDescent) - 1
+	if num >= len(m.displayEntries) {
+		// Technically, the window shouldn't be big enough to allow
+		// repeating elements, but be safe regardless.
+		num = len(m.displayEntries) - 1
+	}
+	for i := 0; i <= num; i++ {
+		entry := m.displayEntries[idx]
 		r := []rune(entry.Display)
 		r = pad(r, m.longestEntry)
 		chars, n := toChar2b(r)
+		y := int16(i+1)*(m.fontAscent+m.fontDescent) + m.fontAscent
+		gc := m.gcN
 		if i == 0 {
-			err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcI, 0,
-				nextY+m.fontAscent, chars).Check()
-		} else {
-			err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0,
-				nextY+m.fontAscent, chars).Check()
+			gc = m.gcI
 		}
+		err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), gc, 0,
+			y, chars).Check()
 		if err != nil {
 			panic(err)
 		}
-		nextY += m.fontAscent + m.fontDescent
+
+		idx = (idx + 1) % len(m.displayEntries)
 	}
 }
