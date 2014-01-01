@@ -14,6 +14,9 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 
 	"github.com/BurntSushi/xgb/xproto"
@@ -30,6 +33,7 @@ import (
 	"github.com/BurntSushi/xgbutil/xwindow"
 
 	"honnef.co/go/gwm/config"
+	"honnef.co/go/gwm/menu"
 )
 
 func min(x, y int) int {
@@ -133,6 +137,35 @@ func printSizeHints(hints *icccm.NormalHints) {
 	if (hints.Flags & icccm.SizeHintPBaseSize) > 0 {
 		log.Printf("\tbw = %d bh = %d", hints.BaseWidth, hints.BaseHeight)
 	}
+}
+
+func executables() []menu.Entry {
+	var executables []string
+	for _, path := range strings.Split(os.Getenv("PATH"), ":") {
+		filepath.Walk(path, func(cur string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if cur == path {
+				return nil
+			}
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			if (info.Mode() & 0111) > 0 {
+				executables = append(executables, filepath.Base(cur))
+			}
+			return nil
+		})
+	}
+
+	sort.StringSlice(executables).Sort()
+
+	entries := make([]menu.Entry, len(executables))
+	for i, e := range executables {
+		entries[i] = menu.Entry{e, e}
+	}
+	return entries
 }
 
 type corner int
@@ -471,12 +504,7 @@ func (win *Window) ToggleMaximize(state MaximizedState) {
 }
 
 func (win *Window) ContainsPointer() bool {
-	ptr, err := xproto.QueryPointer(win.wm.X.Conn(), win.wm.Root.Id).Reply()
-	if err != nil {
-		log.Println("Could not query pointer position:", err)
-		return false
-	}
-	px, py := int(ptr.RootX), int(ptr.RootY)
+	px, py := win.wm.PointerPos()
 	return !(px < win.Geom.X || px > win.Geom.X+win.Geom.Width ||
 		py < win.Geom.Y || py > win.Geom.Y+win.Geom.Height)
 }
@@ -1033,6 +1061,15 @@ func (wm *WM) LoadCursors(mapping map[string]uint16) {
 	}
 }
 
+func (wm *WM) PointerPos() (x, y int) {
+	ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
+	if err != nil {
+		log.Println("Could not query pointer position:", err)
+		return 0, 0
+	}
+	return int(ptr.RootX), int(ptr.RootY)
+}
+
 func (wm *WM) Init(xu *xgbutil.XUtil) {
 	var err error
 	wm.X = xu
@@ -1216,7 +1253,28 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 		}
 	},
 	"exec": func(wm *WM, ev xevent.KeyPressEvent) {
-		execute("dmenu_run")
+		entries := executables()
+		px, py := wm.PointerPos()
+		// FIXME have a way of knowing the current screen even if
+		// there's no current window.
+		sc := subtractGaps(wm.CurWindow.Screen(), wm.Config.Gap)
+		m := menu.New(wm.X, "exec", menu.Config{
+			X:         px,
+			Y:         py,
+			MinY:      wm.Config.Gap.Top,
+			MaxHeight: sc.Height,
+			FilterFn:  menu.FilterPrefix,
+		})
+		m.SetEntries(entries)
+		win := wm.NewWindow(m.Show().Id)
+		win.markActive()
+		go func() {
+			// XXX make sure execute() is thread-safe
+			if ret, ok := m.Wait(); ok {
+				log.Println("Executing", ret.Payload.(string))
+				execute(ret.Payload.(string))
+			}
+		}()
 	},
 }
 
