@@ -16,6 +16,9 @@ import (
 	"github.com/BurntSushi/xgbutil/xwindow"
 )
 
+const promptStart = "\xc2\xbb"
+const promptEnd = "\xc2\xab"
+
 type Config struct {
 	X         int
 	Y         int
@@ -23,6 +26,40 @@ type Config struct {
 	MaxHeight int // TODO should this be MaxY?
 	FilterFn  FilterFunc
 }
+
+type Entry struct {
+	Display string
+	Payload interface{}
+}
+
+type Menu struct {
+	xu             *xgbutil.XUtil
+	parent         xproto.Window
+	x              int
+	y              int
+	width          int
+	height         int
+	minY           int
+	maxHeight      int
+	win            *xwindow.Window
+	entries        []Entry // TODO not string but a struct, mapping display string to command
+	displayEntries []Entry
+	active         int
+	gcI            xproto.Gcontext // FIXME choose better names
+	gcN            xproto.Gcontext
+	font           xproto.Font
+	fontAscent     int16
+	fontDescent    int16
+	title          string
+	input          string
+	longestEntry   int
+	filterFn       FilterFunc
+	ch             chan (Entry)
+}
+
+// TODO document that input slice mustn't be modified
+type FilterFunc func(entries []Entry, prompt string) []Entry
+type ExecFunc func(Entry)
 
 func New(xu *xgbutil.XUtil, title string, cfg Config) *Menu {
 	var err error
@@ -64,10 +101,6 @@ func New(xu *xgbutil.XUtil, title string, cfg Config) *Menu {
 // TODO part of this, the drawing bit, will probably have to go in a
 // different package, so we can use it to draw resize information
 
-// TODO document that input slice mustn't be modified
-type FilterFunc func(entries []Entry, prompt string) []Entry
-type ExecFunc func(Entry)
-
 func FilterPrefix(entries []Entry, prompt string) []Entry {
 	if prompt == "" {
 		return entries
@@ -83,36 +116,6 @@ func FilterPrefix(entries []Entry, prompt string) []Entry {
 }
 
 // TODO document that elements must be sorted
-
-type Entry struct {
-	Display string
-	Payload interface{}
-}
-
-type Menu struct {
-	xu             *xgbutil.XUtil
-	parent         xproto.Window
-	x              int
-	y              int
-	width          int
-	height         int
-	minY           int
-	maxHeight      int
-	win            *xwindow.Window
-	entries        []Entry // TODO not string but a struct, mapping display string to command
-	displayEntries []Entry
-	active         int
-	gcI            xproto.Gcontext // FIXME choose better names
-	gcN            xproto.Gcontext
-	font           xproto.Font
-	fontAscent     int16
-	fontDescent    int16
-	title          string
-	input          string
-	longestEntry   int
-	filterFn       FilterFunc
-	ch             chan (Entry)
-}
 
 func (m *Menu) SetEntries(entries []Entry) {
 	m.entries = entries
@@ -166,11 +169,13 @@ func (m *Menu) Show() *xwindow.Window {
 		panic(err)
 	}
 	mask := uint32(xproto.GcForeground | xproto.GcBackground | xproto.GcFont)
-	err = xproto.CreateGCChecked(m.xu.Conn(), m.gcN, xproto.Drawable(m.win.Id), mask, []uint32{0, 0xFFFFFF, uint32(m.font)}).Check()
+	err = xproto.CreateGCChecked(m.xu.Conn(), m.gcN, xproto.Drawable(m.win.Id), mask,
+		[]uint32{0, 0xFFFFFF, uint32(m.font)}).Check()
 	if err != nil {
 		panic(err)
 	}
-	err = xproto.CreateGCChecked(m.xu.Conn(), m.gcI, xproto.Drawable(m.win.Id), mask, []uint32{0xFFFFFF, 0, uint32(m.font)}).Check()
+	err = xproto.CreateGCChecked(m.xu.Conn(), m.gcI, xproto.Drawable(m.win.Id), mask,
+		[]uint32{0xFFFFFF, 0, uint32(m.font)}).Check()
 	if err != nil {
 		panic(err)
 	}
@@ -229,7 +234,8 @@ func (m *Menu) Show() *xwindow.Window {
 	m.win.MoveResize(m.x, m.y, m.width, m.height)
 
 	for i := 0; i < 500; i++ {
-		reply, err := xproto.GrabKeyboard(m.xu.Conn(), true, m.win.Id, xproto.TimeCurrentTime, xproto.GrabModeSync, xproto.GrabModeAsync).Reply()
+		reply, err := xproto.GrabKeyboard(m.xu.Conn(), true, m.win.Id, xproto.TimeCurrentTime,
+			xproto.GrabModeSync, xproto.GrabModeAsync).Reply()
 		if err != nil {
 			panic(err) // FIXME don't panic
 		}
@@ -261,9 +267,6 @@ func toChar2b(runes []rune) ([]xproto.Char2b, int) {
 	return chars, len(runes)
 }
 
-const promptStart = "\xc2\xbb"
-const promptEnd = "\xc2\xab"
-
 func pad(r []rune, l int) []rune {
 	if len(r) < l {
 		for i := len(r); i <= l; i++ {
@@ -280,7 +283,8 @@ func (m *Menu) prompt() string {
 
 func (m *Menu) draw() {
 	// FIXME fix the fact that the window is sometimes a bit wider than the prompt
-	err := xproto.FillPolyChecked(m.xu.Conn(), xproto.Drawable(m.win.Id), m.gcI, xproto.FillStyleSolid, xproto.CoordModeOrigin, []xproto.Point{{0, 0}, {0, 200}, {200, 200}, {200, 0}}).Check()
+	err := xproto.FillPolyChecked(m.xu.Conn(), xproto.Drawable(m.win.Id), m.gcI, xproto.FillStyleSolid,
+		xproto.CoordModeOrigin, []xproto.Point{{0, 0}, {0, 200}, {200, 200}, {200, 0}}).Check()
 	if err != nil {
 		panic(err)
 	}
@@ -288,7 +292,8 @@ func (m *Menu) draw() {
 	r := pad([]rune(m.prompt()), m.longestEntry)
 	chars, n := toChar2b(r)
 	nextY := int16(0)
-	err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0, nextY+m.fontAscent, chars).Check()
+	err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0,
+		nextY+m.fontAscent, chars).Check()
 	if err != nil {
 		panic(err)
 	}
@@ -302,9 +307,11 @@ func (m *Menu) draw() {
 		r = pad(r, m.longestEntry)
 		chars, n := toChar2b(r)
 		if i == 0 {
-			err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcI, 0, nextY+m.fontAscent, chars).Check()
+			err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcI, 0,
+				nextY+m.fontAscent, chars).Check()
 		} else {
-			err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0, nextY+m.fontAscent, chars).Check()
+			err = xproto.ImageText16Checked(m.xu.Conn(), byte(n), xproto.Drawable(m.win.Id), m.gcN, 0,
+				nextY+m.fontAscent, chars).Check()
 		}
 		if err != nil {
 			panic(err)
