@@ -29,7 +29,6 @@ import (
 	"github.com/BurntSushi/xgbutil/xevent"
 	"github.com/BurntSushi/xgbutil/xinerama"
 	"github.com/BurntSushi/xgbutil/xprop"
-	"github.com/BurntSushi/xgbutil/xrect"
 	"github.com/BurntSushi/xgbutil/xwindow"
 
 	"honnef.co/go/gwm/config"
@@ -172,20 +171,16 @@ func executables() []menu.Entry {
 	return entries
 }
 
-func screenToGeometry(sc xrect.Rect) Geometry {
-	return Geometry{X: sc.X(), Y: sc.Y(), Width: sc.Width(), Height: sc.Height()}
-}
-
-func screenForPoint(screens []xrect.Rect, x, y int) Geometry {
-	var screen xrect.Rect
+func screenForPoint(screens []Geometry, x, y int) Geometry {
+	var screen Geometry
 	for _, screen = range screens {
-		if (x >= screen.X() && x <= screen.X()+screen.Width()) &&
-			(y >= screen.Y() && y <= screen.Y()+screen.Height()) {
+		if (x >= screen.X && x <= screen.X+screen.Width) &&
+			(y >= screen.Y && y <= screen.Y+screen.Height) {
 			break
 		}
 	}
 
-	return screenToGeometry(screen)
+	return screen
 }
 
 type corner int
@@ -1050,14 +1045,18 @@ func (wm *WM) Restack(windows []*Window) {
 	}
 }
 
-func (wm *WM) Screens() []xrect.Rect {
+func (wm *WM) Screens() []Geometry {
 	heads, err := xinerama.PhysicalHeads(wm.X)
 	if len(heads) == 0 || err != nil {
 		rect, err := wm.Root.Geometry()
 		must(err)
 		heads = append(heads, rect)
 	}
-	return heads
+	geoms := make([]Geometry, len(heads))
+	for i, h := range heads {
+		geoms[i] = Geometry{X: h.X(), Y: h.Y(), Width: h.Width(), Height: h.Height()}
+	}
+	return geoms
 }
 
 func (wm *WM) LoadCursors(mapping map[string]uint16) {
