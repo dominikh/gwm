@@ -142,6 +142,10 @@ func printSizeHints(hints *icccm.NormalHints) {
 func executables() []menu.Entry {
 	var executables []string
 	for _, path := range strings.Split(os.Getenv("PATH"), ":") {
+		path, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			continue
+		}
 		filepath.Walk(path, func(cur string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
