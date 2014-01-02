@@ -1218,11 +1218,11 @@ func main() {
 }
 
 func execute(bin string) error {
-	cmd := exec.Command(bin)
+	cmd := exec.Command("/bin/sh", "-c", bin)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	err := cmd.Start()
 	if err != nil {
-		log.Printf("Could not execute %q", bin)
+		log.Printf("Could not execute %q: %s", bin, err)
 		return err
 	}
 	go func() { cmd.Process.Wait() }()
