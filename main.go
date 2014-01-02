@@ -874,7 +874,7 @@ type WM struct {
 }
 
 func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
-	win := wm.GetWindow(ev.Window)
+	win := wm.NewWindow(ev.Window)
 	LogWindowEvent(win, "Mapping")
 	if win.Mapped {
 		LogWindowEvent(win, "Not mapping already mapped window")
@@ -923,7 +923,7 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 }
 
 func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEvent) {
-	win := wm.GetWindow(ev.Window)
+	win := wm.NewWindow(ev.Window)
 	LogWindowEvent(win, "Configure request")
 	if win.curDrag != nil {
 		LogWindowEvent(win, "Ignoring configure request because we are in a drag")
@@ -959,23 +959,14 @@ func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEven
 	win.SendStructureNotify()
 }
 
-func (wm *WM) CreateNotify(xu *xgbutil.XUtil, ev xevent.CreateNotifyEvent) {
-	win := wm.NewWindow(ev.Window)
-	LogWindowEvent(win, "Created new window")
-}
-
 func (w *Window) Attributes() *xproto.GetWindowAttributesReply {
 	attr, err := xproto.GetWindowAttributes(w.wm.X.Conn(), w.Id).Reply()
-	if err != nil {
-		return nil
-	}
+	must(err)
 	return attr
 }
 
 func (wm *WM) NewWindow(c xproto.Window) *Window {
-	// Just for extra security
 	if win, ok := wm.Windows[c]; ok {
-		LogWindowEvent(win, "NewWindow called for the same window twice")
 		return win
 	}
 
@@ -1005,18 +996,25 @@ func (wm *WM) NewWindow(c xproto.Window) *Window {
 	return win
 }
 
-func (wm *WM) GetWindow(c xproto.Window) *Window {
-	if win, ok := wm.Windows[c]; ok {
-		return win
-	}
-	log.Printf("Tried to get window %d that doesn't exist yet", c)
-	return wm.NewWindow(c)
-}
-
 func (wm *WM) QueryTree() []xproto.Window {
 	tree, err := xproto.QueryTree(wm.X.Conn(), wm.Root.Id).Reply()
 	must(err)
 	return tree.Children
+}
+
+func (wm *WM) RelevantQueryTree() []xproto.Window {
+	tree := wm.QueryTree()
+	var wins []xproto.Window
+	for _, c := range tree {
+		attr, err := xproto.GetWindowAttributes(wm.X.Conn(), c).Reply()
+		must(err)
+		if attr.OverrideRedirect || attr.MapState != xproto.MapStateViewable {
+			continue
+		}
+		wins = append(wins, c)
+
+	}
+	return wins
 }
 
 func (wm *WM) GetWindows(states State) []*Window {
@@ -1025,8 +1023,8 @@ func (wm *WM) GetWindows(states State) []*Window {
 			icccm.StateZoomed
 	}
 	var windows []*Window
-	for _, c := range wm.QueryTree() {
-		win := wm.GetWindow(c)
+	for _, c := range wm.RelevantQueryTree() {
+		win := wm.NewWindow(c)
 		if win.State&states > 0 {
 			windows = append(windows, win)
 		}
@@ -1091,14 +1089,11 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	xproto.ChangeWindowAttributes(wm.X.Conn(), wm.Root.Id, xproto.CwCursor,
 		[]uint32{uint32(wm.Cursors["normal"])})
 	var toMark *Window
-	for _, w := range wm.QueryTree() {
+	for _, w := range wm.RelevantQueryTree() {
 		win := wm.NewWindow(w)
-		if win.State&(icccm.StateNormal|icccm.StateIconic) > 0 && !win.Attributes().OverrideRedirect {
-			// FIXME note initial geometry for existing clients
-			win.Init()
-			if win.ContainsPointer() {
-				toMark = win
-			}
+		win.Init()
+		if win.ContainsPointer() {
+			toMark = win
 		}
 	}
 
@@ -1110,7 +1105,6 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 		xproto.EventMaskFocusChange, xproto.EventMaskSubstructureRedirect))
 	xevent.MapRequestFun(wm.MapRequest).Connect(xu, wm.Root.Id)
 	xevent.ConfigureRequestFun(wm.ConfigureRequest).Connect(xu, wm.Root.Id)
-	xevent.CreateNotifyFun(wm.CreateNotify).Connect(xu, wm.Root.Id)
 
 	for key, cmd := range wm.Config.Binds {
 		key, cmd := key, cmd
