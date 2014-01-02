@@ -166,7 +166,7 @@ func executables() []menu.Entry {
 
 	entries := make([]menu.Entry, len(executables))
 	for i, e := range executables {
-		entries[i] = menu.Entry{e, e}
+		entries[i] = menu.Entry{Display: e, Payload: e}
 	}
 	return entries
 }
@@ -1379,7 +1379,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 		m := wm.newMenu("window", entries, filter)
 		m.Show()
 		go func() {
-			if ret, ok := m.Wait(); ok {
+			if ret, ok := m.Wait(); ok && !ret.Synthetic() {
 				wm.chFn <- func() {
 					ret.Payload.(*Window).Activate()
 				}

@@ -31,8 +31,13 @@ type Config struct {
 }
 
 type Entry struct {
-	Display string
-	Payload interface{}
+	Display   string
+	Payload   interface{}
+	synthetic bool
+}
+
+func (e Entry) Synthetic() bool {
+	return e.synthetic
 }
 
 type Menu struct {
@@ -210,6 +215,10 @@ func (m *Menu) Show() *xwindow.Window {
 	}).Connect(m.xu, m.win.Id, "Escape", false)
 
 	keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+		if m.active > len(m.displayEntries)-1 {
+			m.ch <- Entry{m.input, m.input, true}
+			return
+		}
 		m.ch <- m.displayEntries[m.active]
 	}).Connect(m.xu, m.win.Id, "Return", false)
 
