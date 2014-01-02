@@ -845,7 +845,9 @@ func (win *Window) SendStructureNotify() {
 
 func (win *Window) Attributes() *xproto.GetWindowAttributesReply {
 	attr, err := xproto.GetWindowAttributes(win.wm.X.Conn(), win.Id).Reply()
-	must(err)
+	if err != nil {
+		return nil
+	}
 	return attr
 }
 
