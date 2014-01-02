@@ -834,6 +834,12 @@ func (win *Window) SendStructureNotify() {
 		xproto.EventMaskStructureNotify, string(ev.Bytes()))
 }
 
+func (win *Window) Attributes() *xproto.GetWindowAttributesReply {
+	attr, err := xproto.GetWindowAttributes(win.wm.X.Conn(), win.Id).Reply()
+	must(err)
+	return attr
+}
+
 func (win *Window) Center() (x, y int) {
 	return win.Geom.X + win.Geom.Width/2,
 		win.Geom.Y + win.Geom.Height/2
@@ -959,12 +965,6 @@ func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEven
 	)
 
 	win.SendStructureNotify()
-}
-
-func (w *Window) Attributes() *xproto.GetWindowAttributesReply {
-	attr, err := xproto.GetWindowAttributes(w.wm.X.Conn(), w.Id).Reply()
-	must(err)
-	return attr
 }
 
 func (wm *WM) NewWindow(c xproto.Window) *Window {
