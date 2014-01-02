@@ -1389,7 +1389,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) *menu.Menu {
 	px, py := wm.PointerPos()
 	sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
-	m := menu.New(wm.X, "exec", menu.Config{
+	m := menu.New(wm.X, title, menu.Config{
 		X:         px,
 		Y:         py,
 		MinY:      wm.Config.Gap.Top,
