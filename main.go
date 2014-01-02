@@ -246,6 +246,8 @@ type Window struct {
 }
 
 func (win *Window) Name() string {
+	// TODO instead of needing to call this function repeatedly, be
+	// notified and cache when the name changes
 	name, err := ewmh.WmNameGet(win.wm.X, win.Id)
 	if name == "" || err != nil {
 		name, _ = icccm.WmNameGet(win.wm.X, win.Id)
@@ -561,6 +563,13 @@ func (win *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
 	win.markActive()
 }
 
+func (win *Window) Activate() {
+	// FIXME what do we do if the window is hidden behind a different
+	// layer?
+	win.Raise()
+	win.CenterPointer()
+}
+
 func (win *Window) markActive() {
 	if win == win.wm.CurWindow {
 		return
@@ -840,6 +849,22 @@ func (win *Window) Attributes() *xproto.GetWindowAttributesReply {
 	return attr
 }
 
+func (win *Window) Class() (name string, class string) {
+	repl, err := xprop.GetProperty(win.X, win.Id, "WM_CLASS")
+	if err != nil {
+		return "", ""
+	}
+	parts := strings.Split(string(repl.Value), "\x00")
+	switch len(parts) {
+	default:
+		return parts[0], parts[1]
+	case 1:
+		return parts[0], ""
+	case 0:
+		return "", ""
+	}
+}
+
 func (win *Window) Center() (x, y int) {
 	return win.Geom.X + win.Geom.Width/2,
 		win.Geom.Y + win.Geom.Height/2
@@ -879,6 +904,7 @@ type WM struct {
 	Config    *config.Config
 	Windows   map[xproto.Window]*Window
 	CurWindow *Window
+	chFn      chan func()
 }
 
 func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
@@ -1153,7 +1179,17 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	must(ewmh.SupportingWmCheckSet(wm.X, wm.Root.Id, win.Id))
 	must(ewmh.WmNameSet(wm.X, win.Id, "gwm"))
 
-	xevent.Main(wm.X)
+	before, after, quit := xevent.MainPing(wm.X)
+	for {
+		select {
+		case <-before:
+			<-after
+		case fn := <-wm.chFn:
+			fn()
+		case <-quit:
+			return
+		}
+	}
 }
 
 func main() {
@@ -1172,6 +1208,7 @@ func main() {
 		// FIXME all of the make() stuff should be in the Init() method
 		Cursors: make(map[string]xproto.Cursor),
 		Windows: make(map[xproto.Window]*Window),
+		chFn:    make(chan func()),
 	}
 	xu, err := xgbutil.NewConn()
 	must(err)
@@ -1252,34 +1289,28 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"above":        winlayerfunc(LayerAbove),
 	"below":        winlayerfunc(LayerBelow),
 	"delete":       winfunc((*Window).Delete),
+
 	"debug": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("START DEBUG")
 		log.Printf("- Managing %d windows", len(wm.Windows))
 		log.Println("END DEBUG")
 	},
+
 	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
 	},
+
 	"terminal": func(wm *WM, ev xevent.KeyPressEvent) {
 		if cmd, ok := wm.Config.Commands["term"]; ok {
 			execute(cmd)
 		}
 	},
+
 	"exec": func(wm *WM, ev xevent.KeyPressEvent) {
 		entries := executables()
-		px, py := wm.PointerPos()
-		sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
-		m := menu.New(wm.X, "exec", menu.Config{
-			X:         px,
-			Y:         py,
-			MinY:      wm.Config.Gap.Top,
-			MaxHeight: sc.Height,
-			FilterFn:  menu.FilterPrefix,
-		})
-		m.SetEntries(entries)
-		win := wm.NewWindow(m.Show().Id)
-		win.markActive()
+		m := wm.newMenu("exec", entries, menu.FilterPrefix)
+		m.Show()
 		go func() {
 			// XXX make sure execute() is thread-safe
 			if ret, ok := m.Wait(); ok {
@@ -1288,6 +1319,85 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 			}
 		}()
 	},
+
+	"search": func(wm *WM, ev xevent.KeyPressEvent) {
+		wins := wm.GetWindows(icccm.StateNormal) // FIXME hidden windows
+		var entries []menu.Entry
+		for _, win := range wins {
+			// ! currently focused
+			// & hidden
+			// XXX will need to fix this when we support hiding windows
+			// XXX will need to fix this when we support groups
+			entry := menu.Entry{Display: " " + win.Name(), Payload: win} // FIXME add !/& to window name
+			entries = append(entries, entry)
+		}
+		filter := func(entries []menu.Entry, prompt string) []menu.Entry {
+			const tiers = 4 // imitating cwm
+			var outTiers [tiers][]menu.Entry
+			prompt = strings.ToLower(prompt)
+			for _, entry := range entries {
+				win := entry.Payload.(*Window)
+				tier := -1
+
+				// TODO check by label
+				// TODO check by old names
+				if strings.Contains(strings.ToLower(win.Name()), prompt) {
+					tier = 2
+				} else {
+					_, class := win.Class()
+					// FIXME substring matching
+					if strings.Contains(strings.ToLower(class), prompt) {
+						tier = 3
+						entry.Display = " " + class + ":" + entry.Display[1:]
+					}
+				}
+
+				if tier < 0 {
+					continue
+				}
+
+				if win == wm.CurWindow {
+					entry.Display = "!" + entry.Display[1:]
+					if tier < tiers-1 {
+						tier++
+					}
+				}
+
+				// TODO rank one up if hidden
+				outTiers[tier] = append(outTiers[tier], entry)
+			}
+
+			var out []menu.Entry
+			for i := 0; i < tiers; i++ {
+				out = append(out, outTiers[i]...)
+			}
+			return out
+		}
+
+		m := wm.newMenu("window", entries, filter)
+		m.Show()
+		go func() {
+			if ret, ok := m.Wait(); ok {
+				wm.chFn <- func() {
+					ret.Payload.(*Window).Activate()
+				}
+			}
+		}()
+	},
+}
+
+func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) *menu.Menu {
+	px, py := wm.PointerPos()
+	sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
+	m := menu.New(wm.X, "exec", menu.Config{
+		X:         px,
+		Y:         py,
+		MinY:      wm.Config.Gap.Top,
+		MaxHeight: sc.Height,
+		FilterFn:  filter,
+	})
+	m.SetEntries(entries)
+	return m
 }
 
 // TODO watch for wm_normal_hints changes
