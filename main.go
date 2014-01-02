@@ -1076,6 +1076,12 @@ func (wm *WM) PointerPos() (x, y int) {
 	return int(ptr.RootX), int(ptr.RootY)
 }
 
+func (wm *WM) CurrentScreen() Geometry {
+	screens := wm.Screens()
+	cx, cy := wm.PointerPos()
+	return screenForPoint(screens, cx, cy)
+}
+
 func (wm *WM) Init(xu *xgbutil.XUtil) {
 	var err error
 	wm.X = xu
@@ -1263,9 +1269,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"exec": func(wm *WM, ev xevent.KeyPressEvent) {
 		entries := executables()
 		px, py := wm.PointerPos()
-		// FIXME have a way of knowing the current screen even if
-		// there's no current window.
-		sc := subtractGaps(wm.CurWindow.Screen(), wm.Config.Gap)
+		sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
 		m := menu.New(wm.X, "exec", menu.Config{
 			X:         px,
 			Y:         py,
