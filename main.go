@@ -172,6 +172,22 @@ func executables() []menu.Entry {
 	return entries
 }
 
+func screenToGeometry(sc xrect.Rect) Geometry {
+	return Geometry{X: sc.X(), Y: sc.Y(), Width: sc.Width(), Height: sc.Height()}
+}
+
+func screenForPoint(screens []xrect.Rect, x, y int) Geometry {
+	var screen xrect.Rect
+	for _, screen = range screens {
+		if (x >= screen.X() && x <= screen.X()+screen.Width()) &&
+			(y >= screen.Y() && y <= screen.Y()+screen.Height()) {
+			break
+		}
+	}
+
+	return screenToGeometry(screen)
+}
+
 type corner int
 
 const (
@@ -831,16 +847,7 @@ func (win *Window) Center() (x, y int) {
 func (win *Window) Screen() Geometry {
 	screens := win.wm.Screens()
 	cx, cy := win.Center()
-	var screen xrect.Rect
-	for _, screen = range screens {
-		if (cx >= screen.X() && cx <= screen.X()+screen.Width()) &&
-			(cy >= screen.Y() && cy <= screen.Y()+screen.Height()) {
-			break
-		}
-	}
-
-	geom := Geometry{X: screen.X(), Y: screen.Y(), Width: screen.Width(), Height: screen.Height()}
-	return geom
+	return screenForPoint(screens, cx, cy)
 }
 
 func (win *Window) updateWmState() {
