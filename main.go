@@ -575,7 +575,7 @@ func (win *Window) markActive() {
 		return
 	}
 	if !win.Focusable() {
-		LogWindowEvent(win, "\tnot focusable, skipping")
+		LogWindowEvent(win, "not focusable, skipping")
 		return
 	}
 	win.SetBorderColor(win.wm.Config.Colors["activeborder"])
@@ -597,7 +597,7 @@ func (win *Window) Focusable() bool {
 		LogWindowEvent(win, "Could not read hints")
 		return true
 	}
-	return hints.Input == 1
+	return (hints.Flags&icccm.HintInput) == 0 || hints.Input == 1
 }
 
 func (win *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
