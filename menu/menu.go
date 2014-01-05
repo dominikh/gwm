@@ -152,7 +152,7 @@ func (m *Menu) filter() {
 		m.y = m.maxHeight + m.minY - m.height
 	}
 	m.width = int(ex.OverallWidth)
-	m.win.MoveResize(m.x, m.y, m.width, m.height) // FIXME grap input so we can type anywhere
+	m.win.MoveResize(m.x, m.y, m.width, m.height)
 }
 
 func (m *Menu) Show() *xwindow.Window {

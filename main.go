@@ -1339,7 +1339,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 			// & hidden
 			// XXX will need to fix this when we support hiding windows
 			// XXX will need to fix this when we support groups
-			entry := menu.Entry{Display: " " + win.Name(), Payload: win} // FIXME add !/& to window name
+			entry := menu.Entry{Display: " " + win.Name(), Payload: win}
 			entries = append(entries, entry)
 		}
 		filter := func(entries []menu.Entry, prompt string) []menu.Entry {
@@ -1356,7 +1356,6 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 					tier = 2
 				} else {
 					_, class := win.Class()
-					// FIXME substring matching
 					if strings.Contains(strings.ToLower(class), prompt) {
 						tier = 3
 						entry.Display = " " + class + ":" + entry.Display[1:]
