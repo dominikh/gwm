@@ -950,11 +950,12 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	// a) store the border width in every client
 	// b) use that for all calculations involving the border width
 	win.CenterPointer()
-	if (hints.Flags & icccm.HintState) > 0 {
-		win.State = State(hints.InitialState)
-	} else {
-		win.State = icccm.StateNormal
+	if (hints.Flags & icccm.HintState) == 0 {
+		hints.InitialState = icccm.StateNormal
 	}
+	icccm.WmStateSet(wm.X, win.Id, &icccm.WmState{hints.InitialState, 0})
+	win.State = State(hints.InitialState)
+
 	win.SendStructureNotify()
 	win.Mapped = true
 
