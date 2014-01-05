@@ -214,13 +214,15 @@ func (m *Menu) Show() *xwindow.Window {
 		close(m.ch)
 	}).Connect(m.xu, m.win.Id, "Escape", false)
 
-	keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+	fn := keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
 		if m.active > len(m.displayEntries)-1 {
 			m.ch <- Entry{m.input, m.input, true}
 			return
 		}
 		m.ch <- m.displayEntries[m.active]
-	}).Connect(m.xu, m.win.Id, "Return", false)
+	})
+	fn.Connect(m.xu, m.win.Id, "Return", false)
+	fn.Connect(m.xu, m.win.Id, "KP_Enter", false)
 
 	xevent.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
 		key := keybind.LookupString(xu, ev.State, ev.Detail)
