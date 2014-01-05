@@ -1158,7 +1158,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 		key, cmd := key, cmd
 		should(keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
 			if fn, ok := commands[cmd]; ok {
-				fn(wm, ev)
+				fn(wm)
 			} else {
 				execute(cmd)
 			}
@@ -1238,8 +1238,8 @@ func execute(bin string) error {
 	return nil
 }
 
-func winmovefunc(xf, yf int) func(*WM, xevent.KeyPressEvent) {
-	return func(wm *WM, ev xevent.KeyPressEvent) {
+func winmovefunc(xf, yf int) func(*WM) {
+	return func(wm *WM) {
 		if wm.CurWindow == nil {
 			return
 		}
@@ -1249,8 +1249,8 @@ func winmovefunc(xf, yf int) func(*WM, xevent.KeyPressEvent) {
 	}
 }
 
-func winmaximizefunc(state MaximizedState) func(*WM, xevent.KeyPressEvent) {
-	return func(wm *WM, ev xevent.KeyPressEvent) {
+func winmaximizefunc(state MaximizedState) func(*WM) {
+	return func(wm *WM) {
 		if wm.CurWindow == nil {
 			return
 		}
@@ -1258,8 +1258,8 @@ func winmaximizefunc(state MaximizedState) func(*WM, xevent.KeyPressEvent) {
 	}
 }
 
-func winfunc(fn func(*Window)) func(*WM, xevent.KeyPressEvent) {
-	return func(wm *WM, ev xevent.KeyPressEvent) {
+func winfunc(fn func(*Window)) func(*WM) {
+	return func(wm *WM) {
 		if wm.CurWindow == nil {
 			return
 		}
@@ -1267,8 +1267,8 @@ func winfunc(fn func(*Window)) func(*WM, xevent.KeyPressEvent) {
 	}
 }
 
-func winlayerfunc(layer Layer) func(*WM, xevent.KeyPressEvent) {
-	return func(wm *WM, ev xevent.KeyPressEvent) {
+func winlayerfunc(layer Layer) func(*WM) {
+	return func(wm *WM) {
 		if wm.CurWindow == nil {
 			return
 		}
@@ -1281,7 +1281,7 @@ func winlayerfunc(layer Layer) func(*WM, xevent.KeyPressEvent) {
 	}
 }
 
-var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
+var commands = map[string]func(wm *WM){
 	"lower":        winfunc((*Window).Lower),
 	"raise":        winfunc((*Window).Raise),
 	"moveup":       winmovefunc(0, -1),
@@ -1301,24 +1301,24 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	"below":        winlayerfunc(LayerBelow),
 	"delete":       winfunc((*Window).Delete),
 
-	"debug": func(wm *WM, ev xevent.KeyPressEvent) {
+	"debug": func(wm *WM) {
 		log.Println("START DEBUG")
 		log.Printf("- Managing %d windows", len(wm.Windows))
 		log.Println("END DEBUG")
 	},
 
-	"restart": func(wm *WM, ev xevent.KeyPressEvent) {
+	"restart": func(wm *WM) {
 		log.Println("Restarting gwm")
 		syscall.Exec(os.Args[0], os.Args, os.Environ())
 	},
 
-	"terminal": func(wm *WM, ev xevent.KeyPressEvent) {
+	"terminal": func(wm *WM) {
 		if cmd, ok := wm.Config.Commands["term"]; ok {
 			execute(cmd)
 		}
 	},
 
-	"exec": func(wm *WM, ev xevent.KeyPressEvent) {
+	"exec": func(wm *WM) {
 		entries := executables()
 		m := wm.newMenu("exec", entries, menu.FilterPrefix)
 		m.Show()
@@ -1331,7 +1331,7 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 		}()
 	},
 
-	"search": func(wm *WM, ev xevent.KeyPressEvent) {
+	"search": func(wm *WM) {
 		wm.windowSearchMenu()
 	},
 }
