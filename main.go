@@ -587,7 +587,11 @@ func (win *Window) markActive() {
 }
 
 func (win *Window) Focus() {
-	win.Window.Focus()
+	if win.SupportsProtocol("WM_TAKE_FOCUS") {
+		win.SendMessage("WM_TAKE_FOCUS")
+	} else {
+		win.Window.Focus()
+	}
 	should(ewmh.ActiveWindowSet(win.wm.X, win.Id))
 }
 
@@ -597,7 +601,7 @@ func (win *Window) Focusable() bool {
 		LogWindowEvent(win, "Could not read hints")
 		return true
 	}
-	return (hints.Flags&icccm.HintInput) == 0 || hints.Input == 1
+	return (hints.Flags&icccm.HintInput) == 0 || hints.Input == 1 || win.SupportsProtocol("WM_TAKE_FOCUS")
 }
 
 func (win *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
@@ -689,24 +693,20 @@ func (win *Window) Delete() {
 	}
 }
 
-func (win *Window) wmDeleteWindow() bool {
-	if !win.SupportsWmDeleteWindow() {
-		return false
-	}
-
-	wm_protocols, err := xprop.Atm(win.wm.X, "WM_PROTOCOLS")
+func (win *Window) SendMessage(name string) bool {
+	protAtm, err := xprop.Atm(win.wm.X, "WM_PROTOCOLS")
 	if err != nil {
 		LogWindowEvent(win, err)
 		return false
 	}
 
-	wm_del_win, err := xprop.Atm(win.wm.X, "WM_DELETE_WINDOW")
+	nAtm, err := xprop.Atm(win.wm.X, name)
 	if err != nil {
 		LogWindowEvent(win, err)
 		return false
 	}
 
-	cm, err := xevent.NewClientMessage(32, win.Id, wm_protocols, int(wm_del_win))
+	cm, err := xevent.NewClientMessage(32, win.Id, protAtm, int(nAtm))
 	if err != nil {
 		LogWindowEvent(win, err)
 		return false
@@ -721,6 +721,14 @@ func (win *Window) wmDeleteWindow() bool {
 	return true
 }
 
+func (win *Window) wmDeleteWindow() bool {
+	if !win.SupportsProtocol("WM_DELETE_WINDOW") {
+		return false
+	}
+
+	return win.SendMessage("WM_DELETE_WINDOW")
+}
+
 func (win *Window) Protocols() []string {
 	protocols, err := icccm.WmProtocolsGet(win.wm.X, win.Id)
 	if err != nil {
@@ -730,9 +738,9 @@ func (win *Window) Protocols() []string {
 	return protocols
 }
 
-func (win *Window) SupportsWmDeleteWindow() bool {
+func (win *Window) SupportsProtocol(name string) bool {
 	for _, p := range win.Protocols() {
-		if p == "WM_DELETE_WINDOW" {
+		if p == name {
 			return true
 		}
 	}
@@ -1161,6 +1169,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	should(ewmh.CurrentDesktopSet(wm.X, 0))
 	should(ewmh.DesktopViewportSet(wm.X, nil))
 	should(ewmh.SupportedSet(wm.X, []string{
+		"WM_TAKE_FOCUS",
 		"_NET_SUPPORTED",
 		"_NET_NUMBER_OF_DESKTOPS",
 		"_NET_CURRENT_DESKTOP",
