@@ -1332,68 +1332,72 @@ var commands = map[string]func(wm *WM, ev xevent.KeyPressEvent){
 	},
 
 	"search": func(wm *WM, ev xevent.KeyPressEvent) {
-		wins := wm.GetWindows(icccm.StateNormal) // FIXME hidden windows
-		var entries []menu.Entry
-		for _, win := range wins {
-			// ! currently focused
-			// & hidden
-			// XXX will need to fix this when we support hiding windows
-			// XXX will need to fix this when we support groups
-			entry := menu.Entry{Display: " " + win.Name(), Payload: win}
-			entries = append(entries, entry)
-		}
-		filter := func(entries []menu.Entry, prompt string) []menu.Entry {
-			const tiers = 4 // imitating cwm
-			var outTiers [tiers][]menu.Entry
-			prompt = strings.ToLower(prompt)
-			for _, entry := range entries {
-				win := entry.Payload.(*Window)
-				tier := -1
-
-				// TODO check by label
-				// TODO check by old names
-				if strings.Contains(strings.ToLower(win.Name()), prompt) {
-					tier = 2
-				} else {
-					_, class := win.Class()
-					if strings.Contains(strings.ToLower(class), prompt) {
-						tier = 3
-						entry.Display = " " + class + ":" + entry.Display[1:]
-					}
-				}
-
-				if tier < 0 {
-					continue
-				}
-
-				if win == wm.CurWindow {
-					entry.Display = "!" + entry.Display[1:]
-					if tier < tiers-1 {
-						tier++
-					}
-				}
-
-				// TODO rank one up if hidden
-				outTiers[tier] = append(outTiers[tier], entry)
-			}
-
-			var out []menu.Entry
-			for i := 0; i < tiers; i++ {
-				out = append(out, outTiers[i]...)
-			}
-			return out
-		}
-
-		m := wm.newMenu("window", entries, filter)
-		m.Show()
-		go func() {
-			if ret, ok := m.Wait(); ok && !ret.Synthetic() {
-				wm.chFn <- func() {
-					ret.Payload.(*Window).Activate()
-				}
-			}
-		}()
+		wm.windowSearchMenu()
 	},
+}
+
+func (wm *WM) windowSearchMenu() {
+	wins := wm.GetWindows(icccm.StateNormal) // FIXME hidden windows
+	var entries []menu.Entry
+	for _, win := range wins {
+		// ! currently focused
+		// & hidden
+		// XXX will need to fix this when we support hiding windows
+		// XXX will need to fix this when we support groups
+		entry := menu.Entry{Display: " " + win.Name(), Payload: win}
+		entries = append(entries, entry)
+	}
+	filter := func(entries []menu.Entry, prompt string) []menu.Entry {
+		const tiers = 4 // imitating cwm
+		var outTiers [tiers][]menu.Entry
+		prompt = strings.ToLower(prompt)
+		for _, entry := range entries {
+			win := entry.Payload.(*Window)
+			tier := -1
+
+			// TODO check by label
+			// TODO check by old names
+			if strings.Contains(strings.ToLower(win.Name()), prompt) {
+				tier = 2
+			} else {
+				_, class := win.Class()
+				if strings.Contains(strings.ToLower(class), prompt) {
+					tier = 3
+					entry.Display = " " + class + ":" + entry.Display[1:]
+				}
+			}
+
+			if tier < 0 {
+				continue
+			}
+
+			if win == wm.CurWindow {
+				entry.Display = "!" + entry.Display[1:]
+				if tier < tiers-1 {
+					tier++
+				}
+			}
+
+			// TODO rank one up if hidden
+			outTiers[tier] = append(outTiers[tier], entry)
+		}
+
+		var out []menu.Entry
+		for i := 0; i < tiers; i++ {
+			out = append(out, outTiers[i]...)
+		}
+		return out
+	}
+
+	m := wm.newMenu("window", entries, filter)
+	m.Show()
+	go func() {
+		if ret, ok := m.Wait(); ok && !ret.Synthetic() {
+			wm.chFn <- func() {
+				ret.Payload.(*Window).Activate()
+			}
+		}
+	}()
 }
 
 func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) *menu.Menu {
