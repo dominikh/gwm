@@ -645,11 +645,13 @@ func (win *Window) Init() {
 	}
 
 	if ms, ok := win.wm.Config.MouseBinds["window_move"]; ok {
-		mousebind.Drag(win.wm.X, win.Id, win.Id, ms.ToXGB(), true, win.MoveBegin, win.MoveStep, win.MoveEnd)
+		mousebind.Drag(win.wm.X, win.Id, win.Id, ms.ToXGB(), true,
+			win.MoveBegin, win.MoveStep, win.MoveEnd)
 	}
 
 	if ms, ok := win.wm.Config.MouseBinds["window_resize"]; ok {
-		mousebind.Drag(win.wm.X, win.Id, win.Id, ms.ToXGB(), true, win.ResizeBegin, win.ResizeStep, win.ResizeEnd)
+		mousebind.Drag(win.wm.X, win.Id, win.Id, ms.ToXGB(), true,
+			win.ResizeBegin, win.ResizeStep, win.ResizeEnd)
 	}
 
 	if ms, ok := win.wm.Config.MouseBinds["window_lower"]; ok {
@@ -682,6 +684,40 @@ func (win *Window) ClientMessage(xu *xgbutil.XUtil, ev xevent.ClientMessageEvent
 		win.handleState(prop2, data)
 	case "_NET_CLOSE_WINDOW":
 		win.Delete()
+	case "_NET_WM_MOVERESIZE":
+		// Notes:
+		// - currently we only support mouse-initiated actions
+		// - for resize, we ignore data[2] (direction), because we
+		//   determine the corner based on X/Y of the event, and we
+		//   don't support resizing on a single axis
+		// - for some branches of the switch, we might be populating
+		//   `ev` with bogus data, but since we don't use ev in these
+		//   branches, it doesn't matter
+
+		ev := &xproto.ButtonPressEvent{
+			Sequence: 0,
+			Detail:   xproto.Button(data[3]),
+			Root:     win.wm.Root.Id,
+			RootX:    int16(data[0]),
+			RootY:    int16(data[1]),
+			EventX:   int16(data[0]) - int16(win.Geom.X),
+			EventY:   int16(data[1]) - int16(win.Geom.Y),
+			// FIXME what about Event, Child, State and SameScreen?
+		}
+
+		switch data[2] {
+		case ewmh.Move:
+			mousebind.DragBegin(win.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
+				win.MoveBegin, win.MoveStep, win.MoveEnd)
+			return
+		case ewmh.MoveKeyboard, ewmh.SizeKeyboard:
+			return
+		case ewmh.Cancel:
+			mousebind.DragEnd(win.X, xevent.ButtonReleaseEvent{(*xproto.ButtonReleaseEvent)(ev)})
+		default:
+			mousebind.DragBegin(win.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
+				win.ResizeBegin, win.ResizeStep, win.ResizeEnd)
+		}
 	default:
 		LogWindowEvent(win, "Unknown ClientMessage: "+name)
 	}
@@ -1171,6 +1207,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	should(ewmh.DesktopViewportSet(wm.X, nil))
 	should(ewmh.SupportedSet(wm.X, []string{
 		"WM_TAKE_FOCUS",
+		"_NET_WM_MOVERESIZE",
 		"_NET_SUPPORTED",
 		"_NET_NUMBER_OF_DESKTOPS",
 		"_NET_CURRENT_DESKTOP",
