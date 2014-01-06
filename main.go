@@ -374,27 +374,41 @@ func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY i
 	return true, win.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
 }
 
+func roundDown(num int, multiple int) int {
+	if multiple == 0 {
+		return num
+	}
+	return num - (num % multiple)
+}
+
 func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 	if win.frozen {
 		return
 	}
+	// FIXME use resize step from hints
+	wInc := 0
+	hInc := 0
 	// FIXME consider size hints
 	if (win.curDrag.corner & cornerW) > 0 {
-		win.Geom.Width += win.Geom.X - rootX + win.wm.Config.BorderWidth
-		win.Geom.X = rootX - win.wm.Config.BorderWidth
+		d := roundDown(win.Geom.X-rootX+win.wm.Config.BorderWidth, wInc)
+		win.Geom.Width += d
+		win.Geom.X -= d
 	}
 
 	if (win.curDrag.corner & cornerE) > 0 {
-		win.Geom.Width += rootX - (win.Geom.X + win.Geom.Width + win.wm.Config.BorderWidth)
+		n := roundDown(rootX-(win.Geom.X+win.wm.Config.BorderWidth), wInc)
+		win.Geom.Width = n
 	}
 
 	if (win.curDrag.corner & cornerS) > 0 {
-		win.Geom.Height += rootY - (win.Geom.Y + win.Geom.Height + win.wm.Config.BorderWidth)
+		n := roundDown(rootY-(win.Geom.Y+win.wm.Config.BorderWidth), hInc)
+		win.Geom.Height = n
 	}
 
 	if (win.curDrag.corner & cornerN) > 0 {
-		win.Geom.Height += win.Geom.Y - rootY + win.wm.Config.BorderWidth
-		win.Geom.Y = rootY - win.wm.Config.BorderWidth
+		d := roundDown(win.Geom.Y-rootY+win.wm.Config.BorderWidth, hInc)
+		win.Geom.Height += d
+		win.Geom.Y -= d
 	}
 
 	win.moveAndResize()
