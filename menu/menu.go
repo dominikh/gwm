@@ -23,11 +23,13 @@ const promptStart = "\xc2\xbb"
 const promptEnd = "\xc2\xab"
 
 type Config struct {
-	X         int
-	Y         int
-	MinY      int
-	MaxHeight int // TODO should this be MaxY?
-	FilterFn  FilterFunc
+	X           int
+	Y           int
+	MinY        int
+	MaxHeight   int // TODO should this be MaxY?
+	BorderWidth int
+	BorderColor int
+	FilterFn    FilterFunc
 }
 
 type Entry struct {
@@ -60,6 +62,8 @@ type Menu struct {
 	title          string
 	input          string
 	longestEntry   int
+	borderWidth    int
+	borderColor    int
 	filterFn       FilterFunc
 	ch             chan Entry
 }
@@ -72,14 +76,16 @@ func New(xu *xgbutil.XUtil, title string, cfg Config) *Menu {
 	var err error
 
 	m := &Menu{
-		xu:        xu,
-		title:     title,
-		y:         cfg.Y,
-		x:         cfg.X,
-		minY:      cfg.MinY,
-		maxHeight: cfg.MaxHeight,
-		filterFn:  cfg.FilterFn,
-		ch:        make(chan Entry),
+		xu:          xu,
+		title:       title,
+		y:           cfg.Y,
+		x:           cfg.X,
+		minY:        cfg.MinY,
+		maxHeight:   cfg.MaxHeight,
+		borderWidth: cfg.BorderWidth,
+		borderColor: cfg.BorderColor,
+		filterFn:    cfg.FilterFn,
+		ch:          make(chan Entry),
 	}
 
 	m.font, err = xproto.NewFontId(m.xu.Conn())
@@ -158,9 +164,16 @@ func (m *Menu) filter() {
 func (m *Menu) Show() *xwindow.Window {
 	var err error
 	m.win, err = xwindow.Create(m.xu, m.xu.RootWin())
+	m.win, err = xwindow.Generate(m.xu)
 	if err != nil {
 		panic(err)
 	}
+	err = m.win.CreateChecked(m.xu.RootWin(), m.x, m.y, m.width, m.height, 0)
+	if err != nil {
+		panic(err)
+	}
+	xproto.ConfigureWindow(m.xu.Conn(), m.win.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(m.borderWidth)})
+	m.win.Change(xproto.CwBorderPixel, uint32(m.borderColor))
 
 	m.gcN, err = xproto.NewGcontextId(m.xu.Conn())
 	if err != nil {
@@ -237,9 +250,7 @@ func (m *Menu) Show() *xwindow.Window {
 		m.draw()
 	}).Connect(m.xu, m.win.Id)
 
-	// TODO see about setting hints so we get mapped in the right place
 	m.win.Map()
-	m.win.MoveResize(m.x, m.y, m.width, m.height)
 
 	for i := 0; i < 500; i++ {
 		reply, err := xproto.GrabKeyboard(m.xu.Conn(), true, m.win.Id, xproto.TimeCurrentTime,
