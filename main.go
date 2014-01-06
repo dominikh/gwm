@@ -574,6 +574,7 @@ func (win *Window) markActive() {
 	if win == win.wm.CurWindow {
 		return
 	}
+	// TODO how do we close clients that don't accept focus?
 	if !win.Focusable() {
 		LogWindowEvent(win, "not focusable, skipping")
 		return
@@ -969,6 +970,12 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	}
 	win.Init()
 
+	// FIXME if the window starts fullscreen make sure that X/Y is a
+	// screen corner. wine's desktop doesn't set an X/Y at all (and
+	// the usual mouse-pointer based calculation is wrong here), and
+	// who knows what other broken clients are out there who do set a
+	// non-sensical X/Y for a fullscreen client.
+
 	normalHints, err := icccm.WmNormalHintsGet(xu, win.Id)
 	if err != nil || (normalHints.Flags&(icccm.SizeHintPPosition|icccm.SizeHintUSPosition) == 0) {
 		ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
@@ -1155,6 +1162,95 @@ func (wm *WM) CurrentScreen() Geometry {
 	return screenForPoint(screens, cx, cy)
 }
 
+func (wm *WM) debug() {
+	log.Println("START DEBUG")
+	log.Printf("- Managing %d windows", len(wm.Windows))
+	log.Println("END DEBUG")
+}
+
+func (wm *WM) Restart() {
+	log.Println("Restarting gwm")
+	syscall.Exec(os.Args[0], os.Args, os.Environ())
+}
+
+func (wm *WM) windowSearchMenu() {
+	wins := wm.GetWindows(icccm.StateNormal) // FIXME hidden windows
+	var entries []menu.Entry
+	for _, win := range wins {
+		// ! currently focused
+		// & hidden
+		// XXX will need to fix this when we support hiding windows
+		// XXX will need to fix this when we support groups
+		entry := menu.Entry{Display: " " + win.Name(), Payload: win}
+		entries = append(entries, entry)
+	}
+	filter := func(entries []menu.Entry, prompt string) []menu.Entry {
+		const tiers = 4 // imitating cwm
+		var outTiers [tiers][]menu.Entry
+		prompt = strings.ToLower(prompt)
+		for _, entry := range entries {
+			win := entry.Payload.(*Window)
+			tier := -1
+
+			// TODO check by label
+			// TODO check by old names
+			if strings.Contains(strings.ToLower(win.Name()), prompt) {
+				tier = 2
+			} else {
+				_, class := win.Class()
+				if strings.Contains(strings.ToLower(class), prompt) {
+					tier = 3
+					entry.Display = " " + class + ":" + entry.Display[1:]
+				}
+			}
+
+			if tier < 0 {
+				continue
+			}
+
+			if win == wm.CurWindow {
+				entry.Display = "!" + entry.Display[1:]
+				if tier < tiers-1 {
+					tier++
+				}
+			}
+
+			// TODO rank one up if hidden
+			outTiers[tier] = append(outTiers[tier], entry)
+		}
+
+		var out []menu.Entry
+		for i := 0; i < tiers; i++ {
+			out = append(out, outTiers[i]...)
+		}
+		return out
+	}
+
+	m := wm.newMenu("window", entries, filter)
+	m.Show()
+	go func() {
+		if ret, ok := m.Wait(); ok && !ret.Synthetic() {
+			wm.chFn <- func() {
+				ret.Payload.(*Window).Activate()
+			}
+		}
+	}()
+}
+
+func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) *menu.Menu {
+	px, py := wm.PointerPos()
+	sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
+	m := menu.New(wm.X, title, menu.Config{
+		X:         px,
+		Y:         py,
+		MinY:      wm.Config.Gap.Top,
+		MaxHeight: sc.Height,
+		FilterFn:  filter,
+	})
+	m.SetEntries(entries)
+	return m
+}
+
 func (wm *WM) Init(xu *xgbutil.XUtil) {
 	var err error
 	wm.X = xu
@@ -1339,16 +1435,8 @@ var commands = map[string]func(wm *WM){
 	"below":        winlayerfunc(LayerBelow),
 	"delete":       winfunc((*Window).Delete),
 
-	"debug": func(wm *WM) {
-		log.Println("START DEBUG")
-		log.Printf("- Managing %d windows", len(wm.Windows))
-		log.Println("END DEBUG")
-	},
-
-	"restart": func(wm *WM) {
-		log.Println("Restarting gwm")
-		syscall.Exec(os.Args[0], os.Args, os.Environ())
-	},
+	"debug":   (*WM).debug,
+	"restart": (*WM).Restart,
 
 	"terminal": func(wm *WM) {
 		if cmd, ok := wm.Config.Commands["term"]; ok {
@@ -1369,87 +1457,7 @@ var commands = map[string]func(wm *WM){
 		}()
 	},
 
-	"search": func(wm *WM) {
-		wm.windowSearchMenu()
-	},
-}
-
-func (wm *WM) windowSearchMenu() {
-	wins := wm.GetWindows(icccm.StateNormal) // FIXME hidden windows
-	var entries []menu.Entry
-	for _, win := range wins {
-		// ! currently focused
-		// & hidden
-		// XXX will need to fix this when we support hiding windows
-		// XXX will need to fix this when we support groups
-		entry := menu.Entry{Display: " " + win.Name(), Payload: win}
-		entries = append(entries, entry)
-	}
-	filter := func(entries []menu.Entry, prompt string) []menu.Entry {
-		const tiers = 4 // imitating cwm
-		var outTiers [tiers][]menu.Entry
-		prompt = strings.ToLower(prompt)
-		for _, entry := range entries {
-			win := entry.Payload.(*Window)
-			tier := -1
-
-			// TODO check by label
-			// TODO check by old names
-			if strings.Contains(strings.ToLower(win.Name()), prompt) {
-				tier = 2
-			} else {
-				_, class := win.Class()
-				if strings.Contains(strings.ToLower(class), prompt) {
-					tier = 3
-					entry.Display = " " + class + ":" + entry.Display[1:]
-				}
-			}
-
-			if tier < 0 {
-				continue
-			}
-
-			if win == wm.CurWindow {
-				entry.Display = "!" + entry.Display[1:]
-				if tier < tiers-1 {
-					tier++
-				}
-			}
-
-			// TODO rank one up if hidden
-			outTiers[tier] = append(outTiers[tier], entry)
-		}
-
-		var out []menu.Entry
-		for i := 0; i < tiers; i++ {
-			out = append(out, outTiers[i]...)
-		}
-		return out
-	}
-
-	m := wm.newMenu("window", entries, filter)
-	m.Show()
-	go func() {
-		if ret, ok := m.Wait(); ok && !ret.Synthetic() {
-			wm.chFn <- func() {
-				ret.Payload.(*Window).Activate()
-			}
-		}
-	}()
-}
-
-func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) *menu.Menu {
-	px, py := wm.PointerPos()
-	sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
-	m := menu.New(wm.X, title, menu.Config{
-		X:         px,
-		Y:         py,
-		MinY:      wm.Config.Gap.Top,
-		MaxHeight: sc.Height,
-		FilterFn:  filter,
-	})
-	m.SetEntries(entries)
-	return m
+	"search": (*WM).windowSearchMenu,
 }
 
 // TODO watch for wm_normal_hints changes
