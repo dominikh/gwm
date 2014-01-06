@@ -382,33 +382,84 @@ func roundDown(num int, multiple int) int {
 }
 
 func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	// Notes:
+	// - the resize step calculations assume that the window already
+	//   has a valid (base + multiple of step) size.
+	// - it also assumes that the min and max sizes are valid multiples.
+
 	if win.frozen {
 		return
 	}
-	// FIXME use resize step from hints
-	wInc := 0
+
+	rootX -= win.wm.Config.BorderWidth
+	rootY -= win.wm.Config.BorderWidth
+	// FIXME do not query normal hints on each step, instead cache it
+	// and listen to changes
 	hInc := 0
+	wInc := 0
+	hMin := 1
+	wMin := 1
+	hMax := -1
+	wMax := -1
+	normalHints, err := icccm.WmNormalHintsGet(xu, win.Id)
+	if err == nil {
+		if (normalHints.Flags & icccm.SizeHintPResizeInc) > 0 {
+			hInc = int(normalHints.HeightInc)
+			wInc = int(normalHints.WidthInc)
+		}
+
+		if (normalHints.Flags & icccm.SizeHintPBaseSize) > 0 {
+			hMin = int(normalHints.BaseHeight)
+			wMin = int(normalHints.BaseWidth)
+		}
+
+		if (normalHints.Flags & icccm.SizeHintPMinSize) > 0 {
+			hMin = int(normalHints.MinHeight)
+			wMin = int(normalHints.MinWidth)
+		}
+
+		if (normalHints.Flags & icccm.SizeHintPMaxSize) > 0 {
+			hMax = int(normalHints.MaxHeight)
+			wMax = int(normalHints.MaxWidth)
+		}
+	}
+
 	// FIXME consider size hints
+
+	// TODO the meat of this calculation should be moved to a
+	// different function, so that keyboard resizing can reuse it
 	if (win.curDrag.corner & cornerW) > 0 {
-		d := roundDown(win.Geom.X-rootX+win.wm.Config.BorderWidth, wInc)
-		win.Geom.Width += d
-		win.Geom.X -= d
+		d := win.Geom.X - rootX
+		d = roundDown(d, wInc)
+		if win.Geom.Width+d >= wMin && (wMax == -1 || win.Geom.Width+d <= wMax) {
+			win.Geom.Width += d
+			win.Geom.X -= d
+		}
 	}
 
 	if (win.curDrag.corner & cornerE) > 0 {
-		n := roundDown(rootX-(win.Geom.X+win.wm.Config.BorderWidth), wInc)
-		win.Geom.Width = n
+		d := rootX - (win.Geom.X + win.Geom.Width)
+		d = roundDown(d, wInc)
+		if win.Geom.Width+d >= wMin && (wMax == -1 || win.Geom.Width+d <= wMax) {
+			win.Geom.Width += d
+		}
 	}
 
 	if (win.curDrag.corner & cornerS) > 0 {
-		n := roundDown(rootY-(win.Geom.Y+win.wm.Config.BorderWidth), hInc)
-		win.Geom.Height = n
+		d := rootY - (win.Geom.Y + win.Geom.Height)
+		d = roundDown(d, hInc)
+		if win.Geom.Height+d >= hMin && (hMax == -1 || win.Geom.Height+d <= hMax) {
+			win.Geom.Height += d
+		}
 	}
 
 	if (win.curDrag.corner & cornerN) > 0 {
-		d := roundDown(win.Geom.Y-rootY+win.wm.Config.BorderWidth, hInc)
-		win.Geom.Height += d
-		win.Geom.Y -= d
+		d := win.Geom.Y - rootY
+		d = roundDown(d, hInc)
+		if win.Geom.Height+d >= hMin && (hMax == -1 || win.Geom.Height+d <= hMax) {
+			win.Geom.Height += d
+			win.Geom.Y -= d
+		}
 	}
 
 	win.moveAndResize()
@@ -426,6 +477,7 @@ func (win *Window) Move(x, y int) {
 }
 
 func (win *Window) MoveAndResize(x, y, width, height int) {
+	// FIXME respect min/max size and increments
 	// TODO document that this function will reset the maximized state
 	win.Geom.X = x
 	win.Geom.Y = y
@@ -450,6 +502,8 @@ func (win *Window) Fullscreen() {
 	if win.fullscreen {
 		return
 	}
+
+	// TODO what about min/max size and increments?
 
 	sc := win.Screen()
 	win.unfullscreenGeom = win.Geom
@@ -490,6 +544,8 @@ func (win *Window) ToggleFullscreen() {
 }
 
 func (win *Window) Maximize(state MaximizedState) {
+	// TODO what about min/max size and increments?
+
 	// Only store the geometry if we're not maximized at all yet
 	if win.maximized == 0 {
 		win.unmaximizedGeom = win.Geom
