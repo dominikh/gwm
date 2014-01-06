@@ -395,12 +395,15 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 	rootY -= win.wm.Config.BorderWidth
 	// FIXME do not query normal hints on each step, instead cache it
 	// and listen to changes
-	hInc := 0
-	wInc := 0
-	hMin := 1
-	wMin := 1
-	hMax := -1
-	wMax := -1
+	var (
+		dw, dh, dx, dy                                   int
+		hInc, wInc, hMin, wMin, hMax, wMax, hBase, wBase int
+		hasMax, hasAspect                                bool
+		minAspect, maxAspect                             float64
+	)
+	hMin = 1
+	wMin = 1
+
 	normalHints, err := icccm.WmNormalHintsGet(xu, win.Id)
 	if err == nil {
 		if (normalHints.Flags & icccm.SizeHintPResizeInc) > 0 {
@@ -409,6 +412,9 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 		}
 
 		if (normalHints.Flags & icccm.SizeHintPBaseSize) > 0 {
+			hBase = int(normalHints.BaseHeight)
+			wBase = int(normalHints.BaseWidth)
+
 			hMin = int(normalHints.BaseHeight)
 			wMin = int(normalHints.BaseWidth)
 		}
@@ -419,8 +425,15 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 		}
 
 		if (normalHints.Flags & icccm.SizeHintPMaxSize) > 0 {
+			hasMax = true
 			hMax = int(normalHints.MaxHeight)
 			wMax = int(normalHints.MaxWidth)
+		}
+
+		if (normalHints.Flags & icccm.SizeHintPAspect) > 0 {
+			hasAspect = true
+			minAspect = float64(normalHints.MinAspectNum) / float64(normalHints.MinAspectDen)
+			maxAspect = float64(normalHints.MaxAspectNum) / float64(normalHints.MaxAspectDen)
 		}
 	}
 
@@ -428,38 +441,58 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 
 	// TODO the meat of this calculation should be moved to a
 	// different function, so that keyboard resizing can reuse it
+
 	if (win.curDrag.corner & cornerW) > 0 {
-		d := win.Geom.X - rootX
-		d = roundDown(d, wInc)
-		if win.Geom.Width+d >= wMin && (wMax == -1 || win.Geom.Width+d <= wMax) {
-			win.Geom.Width += d
-			win.Geom.X -= d
-		}
+		dw = win.Geom.X - rootX
+		dw = roundDown(dw, wInc)
+		dx = -dw
 	}
 
 	if (win.curDrag.corner & cornerE) > 0 {
-		d := rootX - (win.Geom.X + win.Geom.Width)
-		d = roundDown(d, wInc)
-		if win.Geom.Width+d >= wMin && (wMax == -1 || win.Geom.Width+d <= wMax) {
-			win.Geom.Width += d
-		}
+		dw = rootX - (win.Geom.X + win.Geom.Width)
+		dw = roundDown(dw, wInc)
 	}
 
 	if (win.curDrag.corner & cornerS) > 0 {
-		d := rootY - (win.Geom.Y + win.Geom.Height)
-		d = roundDown(d, hInc)
-		if win.Geom.Height+d >= hMin && (hMax == -1 || win.Geom.Height+d <= hMax) {
-			win.Geom.Height += d
-		}
+		dh = rootY - (win.Geom.Y + win.Geom.Height)
+		dh = roundDown(dh, hInc)
 	}
 
 	if (win.curDrag.corner & cornerN) > 0 {
-		d := win.Geom.Y - rootY
-		d = roundDown(d, hInc)
-		if win.Geom.Height+d >= hMin && (hMax == -1 || win.Geom.Height+d <= hMax) {
-			win.Geom.Height += d
-			win.Geom.Y -= d
+		dh = win.Geom.Y - rootY
+		dh = roundDown(dh, hInc)
+		dy = -dh
+	}
+
+	nh := win.Geom.Height + dh
+	nw := win.Geom.Width + dw
+
+	if hasAspect {
+		nw -= wBase
+		nh -= hBase
+		aspect := float64(nw) / float64(nh)
+		if maxAspect < aspect {
+			nw = int(float64(nh) * maxAspect)
+		} else if minAspect > aspect {
+			nw = int(float64(nh) * minAspect)
 		}
+
+		if dx != 0 {
+			dx -= nw - (win.Geom.Width + dw)
+		}
+
+		nw += wBase
+		nh += hBase
+	}
+
+	if nh >= hMin && (!hasMax || nh <= hMax) {
+		win.Geom.Height = nh
+		win.Geom.Y += dy
+	}
+
+	if nw >= wMin && (!hasMax || nw <= wMax) {
+		win.Geom.Width = nw
+		win.Geom.X += dx
 	}
 
 	win.moveAndResize()
