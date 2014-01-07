@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/BurntSushi/xgbutil"
@@ -1358,24 +1359,49 @@ func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc
 	return m
 }
 
-func (wm *WM) acquireOwnership() error {
+func (wm *WM) acquireOwnership(replace bool) error {
+	killCh := make(chan struct{}, 1)
+	existingWM := false
+	var oldWin *xwindow.Window
+
 	selAtom, err := xprop.Atm(wm.X, fmt.Sprintf("WM_S%d", wm.X.Conn().DefaultScreen))
 	must(err)
 
 	reply, err := xproto.GetSelectionOwner(wm.X.Conn(), selAtom).Reply()
 	must(err)
 	if reply.Owner != xproto.WindowNone {
-		// TODO support replacing an existing WM
-		log.Println("A WM is already running")
-		return errors.New("a WM is already running")
+		if !replace {
+			log.Println("A WM is already running")
+			return errors.New("a WM is already running")
+		}
+		log.Println("A WM is already running, replacing it...")
+		existingWM = true
+		oldWin = xwindow.New(wm.X, reply.Owner)
+		err = oldWin.Listen(xproto.EventMaskStructureNotify)
+		must(err)
+		xevent.DestroyNotifyFun(func(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
+			killCh <- struct{}{}
+		}).Connect(wm.X, oldWin.Id)
 	}
 	err = xproto.SetSelectionOwnerChecked(wm.X.Conn(), wm.X.Dummy(), selAtom, 0).Check()
 	must(err)
 
 	reply, err = xproto.GetSelectionOwner(wm.X.Conn(), selAtom).Reply()
+	must(err)
 	if reply.Owner != wm.X.Dummy() {
-		log.Println("Could not get selection") // FIXME better error
-		return err
+		log.Println("Could not get ownership") // FIXME better error
+		return errors.New("Could not get ownership")
+	}
+
+	if existingWM {
+		timeout := time.After(3 * time.Second)
+		select {
+		case <-timeout:
+			log.Println("Killing misbehaving WM")
+			oldWin.Kill()
+		case <-killCh:
+			return nil
+		}
 	}
 
 	return nil
@@ -1383,7 +1409,8 @@ func (wm *WM) acquireOwnership() error {
 
 func (wm *WM) Init(xu *xgbutil.XUtil) {
 	wm.X = xu
-	if err := wm.acquireOwnership(); err != nil {
+	// TODO make replacing the WM optional
+	if err := wm.acquireOwnership(true); err != nil {
 		return
 	}
 	wm.LoadCursors(map[string]uint16{
