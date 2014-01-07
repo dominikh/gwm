@@ -1415,7 +1415,20 @@ func (wm *WM) acquireOwnership(replace bool) error {
 		ticker.Stop()
 	}
 
+	wm.announce()
+
 	return nil
+}
+
+func (wm *WM) announce() {
+	typAtom, err := xprop.Atm(wm.X, "MANAGER")
+	must(err)
+	manSelAtom, err := xprop.Atm(wm.X, fmt.Sprintf("WM_S%d", wm.X.Conn().DefaultScreen))
+	must(err)
+	cm, err := xevent.NewClientMessage(32, wm.X.RootWin(), typAtom,
+		int(wm.X.TimeGet()), int(manSelAtom), int(wm.X.Dummy()))
+	must(err)
+	xproto.SendEvent(wm.X.Conn(), false, wm.X.RootWin(), xproto.EventMaskStructureNotify, string(cm.Bytes()))
 }
 
 func (wm *WM) Init(xu *xgbutil.XUtil) {
