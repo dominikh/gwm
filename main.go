@@ -11,6 +11,8 @@ tripped me up:
 
 */
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -1356,8 +1358,34 @@ func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc
 	return m
 }
 
+func (wm *WM) acquireOwnership() error {
+	selAtom, err := xprop.Atm(wm.X, fmt.Sprintf("WM_S%d", wm.X.Conn().DefaultScreen))
+	must(err)
+
+	reply, err := xproto.GetSelectionOwner(wm.X.Conn(), selAtom).Reply()
+	must(err)
+	if reply.Owner != xproto.WindowNone {
+		// TODO support replacing an existing WM
+		log.Println("A WM is already running")
+		return errors.New("a WM is already running")
+	}
+	err = xproto.SetSelectionOwnerChecked(wm.X.Conn(), wm.X.Dummy(), selAtom, 0).Check()
+	must(err)
+
+	reply, err = xproto.GetSelectionOwner(wm.X.Conn(), selAtom).Reply()
+	if reply.Owner != wm.X.Dummy() {
+		log.Println("Could not get selection") // FIXME better error
+		return err
+	}
+
+	return nil
+}
+
 func (wm *WM) Init(xu *xgbutil.XUtil) {
 	wm.X = xu
+	if err := wm.acquireOwnership(); err != nil {
+		return
+	}
 	wm.LoadCursors(map[string]uint16{
 		"fleur":               xcursor.Fleur,
 		"normal":              xcursor.LeftPtr,
