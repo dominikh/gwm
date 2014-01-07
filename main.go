@@ -1417,6 +1417,11 @@ func (wm *WM) acquireOwnership(replace bool) error {
 
 	wm.announce()
 
+	xevent.SelectionClearFun(func(xu *xgbutil.XUtil, ev xevent.SelectionClearEvent) {
+		log.Println("A different WM is replacing us")
+		xevent.Quit(xu)
+	}).Connect(wm.X, wm.X.Dummy())
+
 	return nil
 }
 
