@@ -1360,7 +1360,6 @@ func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc
 }
 
 func (wm *WM) acquireOwnership(replace bool) error {
-	killCh := make(chan struct{}, 1)
 	existingWM := false
 	var oldWin *xwindow.Window
 
@@ -1379,9 +1378,6 @@ func (wm *WM) acquireOwnership(replace bool) error {
 		oldWin = xwindow.New(wm.X, reply.Owner)
 		err = oldWin.Listen(xproto.EventMaskStructureNotify)
 		must(err)
-		xevent.DestroyNotifyFun(func(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
-			killCh <- struct{}{}
-		}).Connect(wm.X, oldWin.Id)
 	}
 	err = xproto.SetSelectionOwnerChecked(wm.X.Conn(), wm.X.Dummy(), selAtom, 0).Check()
 	must(err)
@@ -1395,13 +1391,28 @@ func (wm *WM) acquireOwnership(replace bool) error {
 
 	if existingWM {
 		timeout := time.After(3 * time.Second)
-		select {
-		case <-timeout:
-			log.Println("Killing misbehaving WM")
-			oldWin.Kill()
-		case <-killCh:
-			return nil
+		ticker := time.NewTicker(100 * time.Millisecond)
+	killLoop:
+		for {
+			select {
+			case <-timeout:
+				log.Println("Killing misbehaving WM")
+				oldWin.Kill()
+				break killLoop
+			case <-ticker.C:
+				ev, err := wm.X.Conn().PollForEvent()
+				if err != nil {
+					continue
+				}
+				if destNotify, ok := ev.(xproto.DestroyNotifyEvent); ok {
+					if destNotify.Window == oldWin.Id {
+						break killLoop
+					}
+				}
+
+			}
 		}
+		ticker.Stop()
 	}
 
 	return nil
