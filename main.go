@@ -1408,6 +1408,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	should(ewmh.DesktopViewportSet(wm.X, nil))
 	should(ewmh.SupportedSet(wm.X, []string{
 		"WM_TAKE_FOCUS",
+		"_NET_ACTIVE_WINDOW",
 		"_NET_WM_MOVERESIZE",
 		"_NET_SUPPORTED",
 		"_NET_NUMBER_OF_DESKTOPS",
