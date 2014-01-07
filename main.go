@@ -1357,7 +1357,6 @@ func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc
 }
 
 func (wm *WM) Init(xu *xgbutil.XUtil) {
-	var err error
 	wm.X = xu
 	wm.LoadCursors(map[string]uint16{
 		"fleur":               xcursor.Fleur,
@@ -1425,10 +1424,8 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 		"_NET_WM_ACTION_MAXIMIZE_HORZ",
 	}))
 
-	win, err := xwindow.Create(wm.X, wm.Root.Id)
-	must(err)
-	must(ewmh.SupportingWmCheckSet(wm.X, wm.Root.Id, win.Id))
-	must(ewmh.WmNameSet(wm.X, win.Id, "gwm"))
+	must(ewmh.SupportingWmCheckSet(wm.X, wm.Root.Id, wm.X.Dummy()))
+	must(ewmh.WmNameSet(wm.X, wm.X.Dummy(), "gwm"))
 
 	before, after, quit := xevent.MainPing(wm.X)
 	for {
