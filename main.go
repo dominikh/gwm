@@ -1279,6 +1279,10 @@ func (wm *WM) Restart() {
 	syscall.Exec(os.Args[0], os.Args, os.Environ())
 }
 
+func (wm *WM) WarpPointerRel(dx, dy int) {
+	xproto.WarpPointer(wm.X.Conn(), xproto.WindowNone, xproto.WindowNone, 0, 0, 0, 0, int16(dx), int16(dy))
+}
+
 func (wm *WM) windowSearchMenu() {
 	wins := wm.GetWindows(icccm.StateNormal) // FIXME hidden windows
 	var entries []menu.Entry
@@ -1565,7 +1569,10 @@ func winmovefunc(xf, yf int) func(*WM) {
 			return
 		}
 		win := wm.CurWindow
-		win.Move(win.Geom.X+xf*wm.Config.MoveAmount, win.Geom.Y+yf*wm.Config.MoveAmount)
+		dx := xf * wm.Config.MoveAmount
+		dy := yf * wm.Config.MoveAmount
+		win.Move(win.Geom.X+dx, win.Geom.Y+dy)
+		wm.WarpPointerRel(dx, dy)
 		// TODO apply snapping
 	}
 }
