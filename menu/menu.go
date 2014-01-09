@@ -1,7 +1,5 @@
 package menu
 
-// FIXME get rid of all panics
-
 import (
 	"strings"
 	"time"
@@ -66,7 +64,21 @@ type Menu struct {
 type FilterFunc func(entries []Entry, prompt string) []Entry
 type ExecFunc func(Entry)
 
-func New(xu *xgbutil.XUtil, title string, cfg Config) *Menu {
+func FilterPrefix(entries []Entry, prompt string) []Entry {
+	if prompt == "" {
+		return entries
+	}
+	out := make([]Entry, 0, len(entries))
+	prompt = strings.ToLower(prompt)
+	for _, entry := range entries {
+		if strings.HasPrefix(strings.ToLower(entry.Display), prompt) {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func New(xu *xgbutil.XUtil, title string, cfg Config) (*Menu, error) {
 	m := &Menu{
 		xu:          xu,
 		title:       title,
@@ -82,21 +94,105 @@ func New(xu *xgbutil.XUtil, title string, cfg Config) *Menu {
 		gcs:         make(draw.GCs),
 	}
 
-	return m
+	var err error
+	m.win, err = xwindow.Generate(m.xu)
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.win.CreateChecked(m.xu.RootWin(), m.x, m.y, 1, 1, 0)
+	if err != nil {
+		return nil, err
+	}
+	xproto.ConfigureWindow(m.xu.Conn(), m.win.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(m.borderWidth)})
+	m.win.Change(xproto.CwBorderPixel, uint32(m.borderColor))
+
+	err = m.connectEvents()
+	if err != nil {
+		m.win.Destroy()
+		return nil, err
+	}
+	return m, nil
 }
 
-func FilterPrefix(entries []Entry, prompt string) []Entry {
-	if prompt == "" {
-		return entries
+func (m *Menu) up(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+	m.active--
+	if m.active < 0 {
+		m.active = len(m.displayEntries) - 1
 	}
-	out := make([]Entry, 0, len(entries))
-	prompt = strings.ToLower(prompt)
-	for _, entry := range entries {
-		if strings.HasPrefix(strings.ToLower(entry.Display), prompt) {
-			out = append(out, entry)
+	m.draw()
+}
+
+func (m *Menu) down(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+	m.active++ // FIXME handle overflow?
+	if m.active >= len(m.displayEntries) {
+		m.active = 0
+	}
+	m.draw()
+}
+
+func (m *Menu) backspace(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+	if len(m.input) > 0 {
+		r := []rune(m.input)
+		m.input = string(r[:len(r)-1])
+		m.filter()
+		m.draw()
+	}
+}
+
+func (m *Menu) enter(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+	if m.active > len(m.displayEntries)-1 {
+		m.ch <- Entry{m.input, m.input, true}
+		return
+	}
+	m.ch <- m.displayEntries[m.active]
+}
+
+func (m *Menu) escape(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+	close(m.ch)
+}
+
+func (m *Menu) keypress(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+	key := keybind.LookupString(xu, ev.State, ev.Detail)
+	if len([]rune(key)) == 1 {
+		m.input += key
+		m.filter()
+		m.draw()
+	}
+}
+
+func (m *Menu) connectEvents() error {
+	err := m.win.Listen(xproto.EventMaskExposure, xproto.EventMaskKeyPress)
+	if err != nil {
+		return err
+	}
+
+	// TODO support emacs keys
+	for _, grab := range []struct {
+		fn  keybind.KeyPressFun
+		key string
+	}{
+		{m.down, "Down"},
+		{m.up, "Up"},
+		{m.backspace, "BackSpace"},
+		{m.escape, "Escape"},
+		{m.enter, "Return"},
+		{m.enter, "KP_Enter"},
+	} {
+		err := grab.fn.Connect(m.xu, m.win.Id, grab.key, false)
+		if err != nil {
+			// Without a grab, the only possible error is an error
+			// parsing the key name, which is a programmer error.
+			panic(err)
 		}
 	}
-	return out
+
+	xevent.KeyPressFun(m.keypress).Connect(m.xu, m.win.Id)
+	xevent.ExposeFun(func(xu *xgbutil.XUtil, ev xevent.ExposeEvent) {
+		m.draw()
+	}).Connect(m.xu, m.win.Id)
+
+	return nil
 }
 
 func (m *Menu) GCs() draw.GCs {
@@ -133,81 +229,14 @@ func (m *Menu) filter() {
 }
 
 func (m *Menu) Show() *xwindow.Window {
-	var err error
-	m.win, err = xwindow.Generate(m.xu)
-	if err != nil {
-		panic(err)
-	}
-
-	err = m.win.CreateChecked(m.xu.RootWin(), m.x, m.y, 1, 1, 0)
-	if err != nil {
-		panic(err)
-	}
-	xproto.ConfigureWindow(m.xu.Conn(), m.win.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(m.borderWidth)})
-	m.win.Change(xproto.CwBorderPixel, uint32(m.borderColor))
-
-	m.win.Listen(xproto.EventMaskExposure, xproto.EventMaskKeyPress)
-
-	// TODO support emacs keys
-	keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
-		m.active++ // FIXME handle overflow?
-		if m.active >= len(m.displayEntries) {
-			m.active = 0
-		}
-		m.draw()
-	}).Connect(m.xu, m.win.Id, "Down", false)
-
-	keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
-		m.active--
-		if m.active < 0 {
-			m.active = len(m.displayEntries) - 1
-		}
-		m.draw()
-	}).Connect(m.xu, m.win.Id, "Up", false)
-
-	keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
-		if len(m.input) > 0 {
-			r := []rune(m.input)
-			m.input = string(r[:len(r)-1])
-			m.filter()
-			m.draw()
-		}
-	}).Connect(m.xu, m.win.Id, "BackSpace", false)
-
-	keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
-		close(m.ch)
-	}).Connect(m.xu, m.win.Id, "Escape", false)
-
-	fn := keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
-		if m.active > len(m.displayEntries)-1 {
-			m.ch <- Entry{m.input, m.input, true}
-			return
-		}
-		m.ch <- m.displayEntries[m.active]
-	})
-	fn.Connect(m.xu, m.win.Id, "Return", false)
-	fn.Connect(m.xu, m.win.Id, "KP_Enter", false)
-
-	xevent.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
-		key := keybind.LookupString(xu, ev.State, ev.Detail)
-		if len([]rune(key)) == 1 {
-			m.input += key
-			m.filter()
-			m.draw()
-		}
-	}).Connect(m.xu, m.win.Id)
-
-	xevent.ExposeFun(func(xu *xgbutil.XUtil, ev xevent.ExposeEvent) {
-		m.draw()
-	}).Connect(m.xu, m.win.Id)
-
 	m.win.Map()
 
 	for i := 0; i < 500; i++ {
 		reply, err := xproto.GrabKeyboard(m.xu.Conn(), true, m.win.Id, xproto.TimeCurrentTime,
 			xproto.GrabModeSync, xproto.GrabModeAsync).Reply()
 		if err != nil {
-			panic(err) // FIXME don't panic
+			// err ∈ {BadValue, BadWindow} → can only be a programmer error
+			panic(err)
 		}
 		if reply.Status == xproto.GrabStatusSuccess {
 			break

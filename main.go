@@ -1413,7 +1413,11 @@ func (wm *WM) windowSearchMenu() {
 		return out
 	}
 
-	m := wm.newMenu("window", entries, filter)
+	m, err := wm.newMenu("window", entries, filter)
+	if err != nil {
+		log.Println("Could not display menu:", err)
+		return
+	}
 	m.Show()
 	go func() {
 		if ret, ok := m.Wait(); ok && !ret.Synthetic() {
@@ -1424,10 +1428,10 @@ func (wm *WM) windowSearchMenu() {
 	}()
 }
 
-func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) *menu.Menu {
+func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) (*menu.Menu, error) {
 	px, py := wm.PointerPos()
 	sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
-	m := menu.New(wm.X, title, menu.Config{
+	m, err := menu.New(wm.X, title, menu.Config{
 		X:           px,
 		Y:           py,
 		MinY:        wm.Config.Gap.Top,
@@ -1437,8 +1441,11 @@ func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc
 		Font:        wm.font,
 		FilterFn:    filter,
 	})
+	if err != nil {
+		return nil, err
+	}
 	m.SetEntries(entries)
-	return m
+	return m, nil
 }
 
 func (wm *WM) acquireOwnership(replace bool) error {
@@ -1727,7 +1734,11 @@ var commands = map[string]func(wm *WM){
 
 	"exec": func(wm *WM) {
 		entries := executables()
-		m := wm.newMenu("exec", entries, menu.FilterPrefix)
+		m, err := wm.newMenu("exec", entries, menu.FilterPrefix)
+		if err != nil {
+			log.Println("Could not display menu:", err)
+			return
+		}
 		m.Show()
 		go func() {
 			// XXX make sure execute() is thread-safe
