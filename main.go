@@ -1058,6 +1058,7 @@ type WM struct {
 	Windows   map[xproto.Window]*Window
 	CurWindow *Window
 	chFn      chan func()
+	font      xproto.Font
 }
 
 func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
@@ -1357,6 +1358,7 @@ func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc
 		MaxHeight:   sc.Height,
 		BorderWidth: wm.Config.BorderWidth,
 		BorderColor: wm.Config.Colors["activeborder"],
+		Font:        wm.font,
 		FilterFn:    filter,
 	})
 	m.SetEntries(entries)
@@ -1441,6 +1443,8 @@ func (wm *WM) announce() {
 }
 
 func (wm *WM) Init(xu *xgbutil.XUtil) {
+	var err error
+
 	wm.X = xu
 	// TODO make replacing the WM optional
 	if err := wm.acquireOwnership(true); err != nil {
@@ -1454,6 +1458,13 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 		"bottom_left_corner":  xcursor.BottomLeftCorner,
 		"bottom_right_corner": xcursor.BottomRightCorner,
 	})
+
+	wm.font, err = xproto.NewFontId(xu.Conn())
+	must(err)
+
+	name := "-Misc-Fixed-Bold-R-Normal--18-120-100-100-C-90-ISO10646-1"
+	err = xproto.OpenFontChecked(xu.Conn(), wm.font, uint16(len(name)), name).Check()
+	must(err)
 
 	mousebind.Initialize(wm.X)
 	keybind.Initialize(wm.X)
