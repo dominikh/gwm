@@ -1653,7 +1653,7 @@ func execute(bin string) error {
 		log.Printf("Could not execute %q: %s", bin, err)
 		return err
 	}
-	go func() { cmd.Process.Wait() }()
+	go cmd.Process.Wait()
 	return nil
 }
 
