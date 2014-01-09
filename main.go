@@ -35,6 +35,7 @@ import (
 	"github.com/BurntSushi/xgbutil/xwindow"
 
 	"honnef.co/go/gwm/config"
+	"honnef.co/go/gwm/draw"
 	"honnef.co/go/gwm/menu"
 )
 
@@ -246,6 +247,37 @@ type Window struct {
 	fullscreen        bool
 	unfullscreenLayer Layer
 	frozen            bool
+	overlay           *Window
+	gcs               draw.GCs
+}
+
+func (win *Window) GCs() draw.GCs {
+	return win.gcs
+}
+
+func (win *Window) Win() xproto.Window {
+	return win.Id
+}
+
+func (win *Window) X() *xgbutil.XUtil {
+	return win.wm.X
+}
+
+func (win *Window) CreateOverlay() error {
+	w, err := xwindow.Create(win.wm.X, win.Id)
+	if err != nil {
+		return err
+	}
+	win.overlay = win.wm.NewWindow(w.Id)
+	return nil
+}
+
+func (win *Window) DestroyOverlay() {
+	if win.overlay == nil {
+		return
+	}
+	win.overlay.Destroy()
+	win.overlay = nil
 }
 
 func (win *Window) Name() string {
@@ -341,6 +373,7 @@ func (win *Window) MoveEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) 
 }
 
 func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
+	win.CreateOverlay()
 	if eventX < 0 {
 		eventX = 0
 	}
@@ -499,9 +532,17 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 	}
 
 	win.moveAndResize()
+
+	win.overlay.Map()
+	draw.Fill(win.overlay, win.overlay.Geom.Width, win.overlay.Geom.Height, 0xFFFFFF)
+	w, h := draw.Text(win.overlay, fmt.Sprintf("%d × %d", win.Geom.Width, win.Geom.Height),
+		win.wm.font, 0, 0xFFFFFF, 0, 0)
+	win.overlay.Resize(w, h)
+
 }
 
 func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
+	win.DestroyOverlay()
 	win.curDrag = nil
 }
 
@@ -510,6 +551,12 @@ func (win *Window) Move(x, y int) {
 	win.Geom.X = x
 	win.Geom.Y = y
 	win.move()
+}
+
+func (win *Window) Resize(w, h int) {
+	win.Geom.Width = w
+	win.Geom.Height = h
+	win.resize()
 }
 
 func (win *Window) MoveAndResize(x, y, width, height int) {
@@ -645,6 +692,14 @@ func (win *Window) move() {
 	win.updateWmState()
 }
 
+// resize resizes the window based on its current Geom. It also resets
+// the window's maximized state.
+func (win *Window) resize() {
+	win.Window.Resize(win.Geom.Width, win.Geom.Height)
+	win.maximized &= ^MaximizedFull
+	win.updateWmState()
+}
+
 // moveAndResize moves and resizes the window based on its current
 // Geom. It also resets the window's maximized state.
 func (win *Window) moveAndResize() {
@@ -656,6 +711,11 @@ func (win *Window) moveAndResize() {
 // move moves the window based on its current Geom.
 func (win *Window) moveNoReset() {
 	win.Window.Move(win.Geom.X, win.Geom.Y)
+}
+
+// resize resizes the window based on its current Geom.
+func (win *Window) resizeNoReset() {
+	win.Window.Resize(win.Geom.Width, win.Geom.Height)
 }
 
 // moveAndResize moves and resizes the window based on its current
@@ -742,7 +802,7 @@ func (win *Window) Init() {
 		win.Geom.Height = int(attr.Height)
 	}
 
-	states, err := ewmh.WmStateGet(win.X, win.Id)
+	states, err := ewmh.WmStateGet(win.wm.X, win.Id)
 	if err != nil {
 		LogWindowEvent(win, "Could not get _NET_WM_STATE")
 	} else {
@@ -814,15 +874,15 @@ func (win *Window) ClientMessage(xu *xgbutil.XUtil, ev xevent.ClientMessageEvent
 
 		switch data[2] {
 		case ewmh.Move:
-			mousebind.DragBegin(win.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
+			mousebind.DragBegin(win.wm.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
 				win.MoveBegin, win.MoveStep, win.MoveEnd)
 			return
 		case ewmh.MoveKeyboard, ewmh.SizeKeyboard:
 			return
 		case ewmh.Cancel:
-			mousebind.DragEnd(win.X, xevent.ButtonReleaseEvent{(*xproto.ButtonReleaseEvent)(ev)})
+			mousebind.DragEnd(win.wm.X, xevent.ButtonReleaseEvent{(*xproto.ButtonReleaseEvent)(ev)})
 		default:
-			mousebind.DragBegin(win.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
+			mousebind.DragBegin(win.wm.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
 				win.ResizeBegin, win.ResizeStep, win.ResizeEnd)
 		}
 	default:
@@ -1003,7 +1063,7 @@ func (win *Window) Attributes() *xproto.GetWindowAttributesReply {
 }
 
 func (win *Window) Class() (name string, class string) {
-	repl, err := xprop.GetProperty(win.X, win.Id, "WM_CLASS")
+	repl, err := xprop.GetProperty(win.wm.X, win.Id, "WM_CLASS")
 	if err != nil {
 		return "", ""
 	}
@@ -1047,7 +1107,7 @@ func (win *Window) updateWmState() {
 		atoms = append(atoms, "_NET_WM_STATE_BELOW")
 	}
 	// TODO other hints
-	ewmh.WmStateSet(win.X, win.Id, atoms)
+	ewmh.WmStateSet(win.wm.X, win.Id, atoms)
 }
 
 type WM struct {
@@ -1159,7 +1219,7 @@ func (wm *WM) NewWindow(c xproto.Window) *Window {
 		return win
 	}
 
-	win := &Window{wm: wm, Window: xwindow.New(wm.X, c)}
+	win := &Window{wm: wm, Window: xwindow.New(wm.X, c), gcs: make(draw.GCs)}
 	LogWindowEvent(win, "Managing window")
 	wm.Windows[c] = win
 
