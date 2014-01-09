@@ -263,23 +263,6 @@ func (win *Window) X() *xgbutil.XUtil {
 	return win.wm.X
 }
 
-func (win *Window) CreateOverlay() error {
-	w, err := xwindow.Create(win.wm.X, win.Id)
-	if err != nil {
-		return err
-	}
-	win.overlay = win.wm.NewWindow(w.Id)
-	return nil
-}
-
-func (win *Window) DestroyOverlay() {
-	if win.overlay == nil {
-		return
-	}
-	win.overlay.Destroy()
-	win.overlay = nil
-}
-
 func (win *Window) Name() string {
 	// TODO instead of needing to call this function repeatedly, be
 	// notified and cache when the name changes
@@ -373,7 +356,6 @@ func (win *Window) MoveEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) 
 }
 
 func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
-	win.CreateOverlay()
 	if eventX < 0 {
 		eventX = 0
 	}
@@ -407,6 +389,7 @@ func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY i
 
 	win.curDrag = &drag{win.Geom.X, win.Geom.Y, rootX, rootY, corner}
 	xproto.WarpPointer(win.wm.X.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0, int16(x), int16(y))
+	win.ShowOverlay()
 	return true, win.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
 }
 
@@ -532,17 +515,11 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 	}
 
 	win.moveAndResize()
-
-	win.overlay.Map()
-	draw.Fill(win.overlay, win.overlay.Geom.Width, win.overlay.Geom.Height, 0xFFFFFF)
-	w, h := draw.Text(win.overlay, fmt.Sprintf("%d × %d", win.Geom.Width, win.Geom.Height),
-		win.wm.font, 0, 0xFFFFFF, 0, 0)
-	win.overlay.Resize(w, h)
-
+	win.WriteToOverlay(fmt.Sprintf("%d × %d", win.Geom.Width, win.Geom.Height))
 }
 
 func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
-	win.DestroyOverlay()
+	win.HideOverlay()
 	win.curDrag = nil
 }
 
@@ -784,6 +761,32 @@ func (win *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
 	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
 }
 
+func (win *Window) ShowOverlay() {
+	if win.overlay == nil {
+		return
+	}
+	win.overlay.Map()
+
+}
+
+func (win *Window) HideOverlay() {
+	if win.overlay == nil {
+		return
+	}
+	win.overlay.Unmap()
+
+}
+
+func (win *Window) WriteToOverlay(s string) {
+	if win.overlay == nil {
+		return
+	}
+	draw.Fill(win.overlay, win.overlay.Geom.Width, win.overlay.Geom.Height, 0xFFFFFF)
+	w, h := draw.Text(win.overlay, s,
+		win.wm.font, 0, 0xFFFFFF, 0, 0)
+	win.overlay.Resize(w, h)
+}
+
 func (win *Window) Init() {
 	// TODO do something if the state is iconified
 	LogWindowEvent(win, "Initializing")
@@ -824,6 +827,19 @@ func (win *Window) Init() {
 	if ms, ok := win.wm.Config.MouseBinds["window_lower"]; ok {
 		fn := func(xu *xgbutil.XUtil, ev xevent.ButtonPressEvent) { win.Lower() }
 		should(mousebind.ButtonPressFun(fn).Connect(win.wm.X, win.Id, ms.ToXGB(), false, true))
+	}
+
+	w, err := xwindow.Create(win.wm.X, win.wm.Root.Id)
+	should(err)
+	if err == nil {
+		// For some reason we need to create and then reparent.
+		// Directly specifying a window as the parent might fail with
+		// BadMatch, for example with mplayer.
+		err := xproto.ReparentWindowChecked(win.wm.X.Conn(), w.Id, win.Id, 0, 0).Check()
+		should(err)
+		if err == nil {
+			win.overlay = win.wm.NewWindow(w.Id)
+		}
 	}
 
 	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
