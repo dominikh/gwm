@@ -79,14 +79,6 @@ func should(err error) {
 	log.Println("Error:", err)
 }
 
-func subtractGaps(sc Geometry, gap config.Gap) Geometry {
-	sc.X += gap.Left
-	sc.Y += gap.Top
-	sc.Width -= gap.Left + gap.Right
-	sc.Height -= gap.Top + gap.Bottom
-	return sc
-}
-
 func snapcalc(n0, n1, e0, e1, snapdist int) int {
 	var s0, s1 int
 
@@ -232,6 +224,14 @@ type Geometry struct {
 	Width, Height int
 }
 
+func (g Geometry) subtractGap(gap config.Gap) Geometry {
+	g.X += gap.Left
+	g.Y += gap.Top
+	g.Width -= gap.Left + gap.Right
+	g.Height -= gap.Top + gap.Bottom
+	return g
+}
+
 type Window struct {
 	*xwindow.Window
 	State             State
@@ -342,7 +342,7 @@ func (win *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int)
 	win.Geom.Y = win.curDrag.startY + dy
 
 	screen := win.Screen()
-	screen = subtractGaps(screen, win.wm.Config.Gap)
+	screen = screen.subtractGap(win.wm.Config.Gap)
 
 	win.Geom.X += snapcalc(win.Geom.X, win.Geom.X+win.Geom.Width+win.BorderWidth*2,
 		screen.X, screen.X+screen.Width, win.wm.Config.Snapdist)
@@ -611,7 +611,7 @@ func (win *Window) Maximize(state MaximizedState) {
 		win.unmaximizedGeom = win.Geom
 	}
 
-	sc := subtractGaps(win.Screen(), win.wm.Config.Gap)
+	sc := win.Screen().subtractGap(win.wm.Config.Gap)
 	if (state & MaximizedH) > 0 {
 		win.Geom.X = sc.X
 		win.Geom.Width = sc.Width - 2*win.wm.Config.BorderWidth
@@ -1430,7 +1430,7 @@ func (wm *WM) windowSearchMenu() {
 
 func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) (*menu.Menu, error) {
 	px, py := wm.PointerPos()
-	sc := subtractGaps(wm.CurrentScreen(), wm.Config.Gap)
+	sc := wm.CurrentScreen().subtractGap(wm.Config.Gap)
 	m, err := menu.New(wm.X, title, menu.Config{
 		X:           px,
 		Y:           py,
