@@ -195,6 +195,7 @@ const (
 )
 
 type drag struct {
+	ptrX, ptrY       int
 	startX, startY   int
 	offsetX, offsetY int
 	corner           corner
@@ -230,6 +231,10 @@ func (g Geometry) subtractGap(gap config.Gap) Geometry {
 	g.Width -= gap.Left + gap.Right
 	g.Height -= gap.Top + gap.Bottom
 	return g
+}
+
+func (g Geometry) Contains(x, y int) bool {
+	return !(x < g.X || x > g.X+g.Width || y < g.Y || y > g.Y+g.Height)
 }
 
 type Window struct {
@@ -326,7 +331,16 @@ func (win *Window) Lower() {
 
 func (win *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
 	win.Raise()
-	win.curDrag = &drag{win.Geom.X, win.Geom.Y, rootX, rootY, cornerNone}
+	px, py := win.wm.PointerPos()
+	win.curDrag = &drag{
+		ptrX:    px,
+		ptrY:    py,
+		startX:  win.Geom.X,
+		startY:  win.Geom.Y,
+		offsetX: rootX,
+		offsetY: rootY,
+		corner:  cornerNone,
+	}
 	return true, win.wm.Cursors["fleur"]
 }
 
@@ -387,7 +401,16 @@ func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY i
 		cursorY = "top"
 	}
 
-	win.curDrag = &drag{win.Geom.X, win.Geom.Y, rootX, rootY, corner}
+	px, py := win.wm.PointerPos()
+	win.curDrag = &drag{
+		ptrX:    px,
+		ptrY:    py,
+		startX:  win.Geom.X,
+		startY:  win.Geom.Y,
+		offsetX: rootX,
+		offsetY: rootY,
+		corner:  corner,
+	}
 	xproto.WarpPointer(win.wm.X.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0, int16(x), int16(y))
 	win.ShowOverlay()
 	return true, win.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
@@ -520,6 +543,12 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 
 func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 	win.HideOverlay()
+	if win.Geom.Contains(win.curDrag.ptrX, win.curDrag.ptrY) {
+		fmt.Println(win.curDrag.ptrX, win.curDrag.ptrY)
+		win.wm.WarpPointer(win.curDrag.ptrX, win.curDrag.ptrY)
+	} else if !win.Geom.Contains(rootX, rootY) {
+		win.CenterPointer()
+	}
 	win.curDrag = nil
 }
 
@@ -651,9 +680,7 @@ func (win *Window) ToggleMaximize(state MaximizedState) {
 }
 
 func (win *Window) ContainsPointer() bool {
-	px, py := win.wm.PointerPos()
-	return !(px < win.Geom.X || px > win.Geom.X+win.Geom.Width ||
-		py < win.Geom.Y || py > win.Geom.Y+win.Geom.Height)
+	return win.Geom.Contains(win.wm.PointerPos())
 }
 
 func (win *Window) CenterPointer() {
@@ -1354,6 +1381,13 @@ func (wm *WM) debug() {
 func (wm *WM) Restart() {
 	log.Println("Restarting gwm")
 	syscall.Exec(os.Args[0], os.Args, os.Environ())
+}
+
+func (wm *WM) WarpPointer(x, y int) {
+	px, py := wm.PointerPos()
+	dx := x - px
+	dy := y - py
+	xproto.WarpPointer(wm.X.Conn(), xproto.WindowNone, xproto.WindowNone, 0, 0, 0, 0, int16(dx), int16(dy))
 }
 
 func (wm *WM) WarpPointerRel(dx, dy int) {
