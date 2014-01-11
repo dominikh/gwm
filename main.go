@@ -779,7 +779,7 @@ func (win *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent
 func (win *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
 	LogWindowEvent(win, "Unmapping")
 	win.Mapped = false
-	win.State = icccm.StateIconic
+	win.State = icccm.StateWithdrawn
 	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
 }
 
