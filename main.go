@@ -773,6 +773,11 @@ func (win *Window) Focusable() bool {
 func (win *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
 	LogWindowEvent(win, "Destroying")
 	win.Detach()
+	if win.overlay != nil {
+		win.overlay.Detach()
+		delete(win.wm.Windows, win.overlay.Id)
+		win.overlay = nil
+	}
 	delete(win.wm.Windows, win.Id)
 }
 
