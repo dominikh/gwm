@@ -1174,19 +1174,20 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 		LogWindowEvent(win, "No WM_HINTS")
 		hints = &icccm.Hints{}
 	}
+	// FIXME why do we split work across MapRequest and Init? should
+	// these be collapsed into a single function? does anyone else
+	// call Init?
+	//
+	// Yes, we call Init when the WM first starts
 	win.Init()
 
-	// FIXME if the window starts fullscreen make sure that X/Y is a
-	// screen corner. wine's desktop doesn't set an X/Y at all (and
-	// the usual mouse-pointer based calculation is wrong here), and
-	// who knows what other broken clients are out there who do set a
-	// non-sensical X/Y for a fullscreen client.
-
-	normalHints, err := icccm.WmNormalHintsGet(xu, win.Id)
+	normalHints, err := icccm.WmNormalHintsGet(win.wm.X, win.Id)
 	if err != nil || (normalHints.Flags&(icccm.SizeHintPPosition|icccm.SizeHintUSPosition) == 0) {
-		ptr := wm.PointerPos()
-		win.Geom.X = int(ptr.X) - win.Geom.Width/2
-		win.Geom.Y = int(ptr.Y) - win.Geom.Height/2
+		if win.maximized == 0 && !win.fullscreen {
+			ptr := win.wm.PointerPos()
+			win.Geom.X = int(ptr.X) - win.Geom.Width/2
+			win.Geom.Y = int(ptr.Y) - win.Geom.Height/2
+		}
 	}
 
 	win.moveNoReset()
