@@ -61,6 +61,13 @@ func abs(x int) int {
 	return -x
 }
 
+func roundDown(num int, multiple int) int {
+	if multiple == 0 {
+		return num
+	}
+	return num - (num % multiple)
+}
+
 // TODO replace all uses of must() and should() with meaningful error
 // handling/logging.
 func must(err error) {
@@ -167,11 +174,10 @@ func executables() []menu.Entry {
 	return entries
 }
 
-func screenForPoint(screens []Geometry, x, y int) Geometry {
+func screenForPoint(screens []Geometry, p Point) Geometry {
 	var screen Geometry
 	for _, screen = range screens {
-		if (x >= screen.X && x <= screen.X+screen.Width) &&
-			(y >= screen.Y && y <= screen.Y+screen.Height) {
+		if screen.Contains(p) {
 			break
 		}
 	}
@@ -195,10 +201,10 @@ const (
 )
 
 type drag struct {
-	ptrX, ptrY       int
-	startX, startY   int
-	offsetX, offsetY int
-	corner           corner
+	pointer Point
+	start   Point
+	offset  Point
+	corner  corner
 }
 
 type Layer int
@@ -220,6 +226,11 @@ const (
 	MaximizedFull MaximizedState = 3
 )
 
+type Point struct {
+	X int
+	Y int
+}
+
 type Geometry struct {
 	X, Y          int
 	Width, Height int
@@ -233,8 +244,8 @@ func (g Geometry) subtractGap(gap config.Gap) Geometry {
 	return g
 }
 
-func (g Geometry) Contains(x, y int) bool {
-	return !(x < g.X || x > g.X+g.Width || y < g.Y || y > g.Y+g.Height)
+func (g Geometry) Contains(p Point) bool {
+	return !(p.X < g.X || p.X > g.X+g.Width || p.Y < g.Y || p.Y > g.Y+g.Height)
 }
 
 type Window struct {
@@ -331,14 +342,10 @@ func (win *Window) Lower() {
 
 func (win *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
 	win.Raise()
-	px, py := win.wm.PointerPos()
 	win.curDrag = &drag{
-		ptrX:    px,
-		ptrY:    py,
-		startX:  win.Geom.X,
-		startY:  win.Geom.Y,
-		offsetX: rootX,
-		offsetY: rootY,
+		pointer: win.wm.PointerPos(),
+		start:   Point{win.Geom.X, win.Geom.Y},
+		offset:  Point{rootX, rootY},
 		corner:  cornerNone,
 	}
 	return true, win.wm.Cursors["fleur"]
@@ -348,12 +355,12 @@ func (win *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int)
 	if win.frozen {
 		return
 	}
-	dx := rootX - win.curDrag.offsetX
-	dy := rootY - win.curDrag.offsetY
+	dx := rootX - win.curDrag.offset.X
+	dy := rootY - win.curDrag.offset.Y
 
 	// FIXME do we need to consider the border here?
-	win.Geom.X = win.curDrag.startX + dx
-	win.Geom.Y = win.curDrag.startY + dy
+	win.Geom.X = win.curDrag.start.X + dx
+	win.Geom.Y = win.curDrag.start.Y + dy
 
 	screen := win.Screen()
 	screen = screen.subtractGap(win.wm.Config.Gap)
@@ -401,26 +408,17 @@ func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY i
 		cursorY = "top"
 	}
 
-	px, py := win.wm.PointerPos()
 	win.curDrag = &drag{
-		ptrX:    px,
-		ptrY:    py,
-		startX:  win.Geom.X,
-		startY:  win.Geom.Y,
-		offsetX: rootX,
-		offsetY: rootY,
+		pointer: win.wm.PointerPos(),
+		start:   Point{win.Geom.X, win.Geom.Y},
+		offset:  Point{rootX, rootY},
 		corner:  corner,
 	}
+
+	// TODO move WarpPointer to method on Window
 	xproto.WarpPointer(win.wm.X.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0, int16(x), int16(y))
 	win.ShowOverlay()
 	return true, win.wm.Cursors[cursorY+"_"+cursorX+"_corner"]
-}
-
-func roundDown(num int, multiple int) int {
-	if multiple == 0 {
-		return num
-	}
-	return num - (num % multiple)
 }
 
 func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
@@ -543,10 +541,9 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 
 func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 	win.HideOverlay()
-	if win.Geom.Contains(win.curDrag.ptrX, win.curDrag.ptrY) {
-		fmt.Println(win.curDrag.ptrX, win.curDrag.ptrY)
-		win.wm.WarpPointer(win.curDrag.ptrX, win.curDrag.ptrY)
-	} else if !win.Geom.Contains(rootX, rootY) {
+	if win.Geom.Contains(win.curDrag.pointer) {
+		win.wm.WarpPointer(win.curDrag.pointer)
+	} else if !win.Geom.Contains(Point{rootX, rootY}) {
 		win.CenterPointer()
 	}
 	win.curDrag = nil
@@ -1121,15 +1118,14 @@ func (win *Window) Class() (name string, class string) {
 	}
 }
 
-func (win *Window) Center() (x, y int) {
-	return win.Geom.X + win.Geom.Width/2,
-		win.Geom.Y + win.Geom.Height/2
+func (win *Window) Center() Point {
+	return Point{win.Geom.X + win.Geom.Width/2,
+		win.Geom.Y + win.Geom.Height/2}
 }
 
 func (win *Window) Screen() Geometry {
 	screens := win.wm.Screens()
-	cx, cy := win.Center()
-	return screenForPoint(screens, cx, cy)
+	return screenForPoint(screens, win.Center())
 }
 
 func (win *Window) updateWmState() {
@@ -1188,13 +1184,9 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 
 	normalHints, err := icccm.WmNormalHintsGet(xu, win.Id)
 	if err != nil || (normalHints.Flags&(icccm.SizeHintPPosition|icccm.SizeHintUSPosition) == 0) {
-		ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
-		if err == nil {
-			win.Geom.X = int(ptr.RootX) - win.Geom.Width/2
-			win.Geom.Y = int(ptr.RootY) - win.Geom.Height/2
-		} else {
-			log.Println("Could not get pointer position:", err)
-		}
+		ptr := wm.PointerPos()
+		win.Geom.X = int(ptr.X) - win.Geom.Width/2
+		win.Geom.Y = int(ptr.Y) - win.Geom.Height/2
 	}
 
 	win.moveNoReset()
@@ -1357,19 +1349,18 @@ func (wm *WM) LoadCursors(mapping map[string]uint16) {
 	}
 }
 
-func (wm *WM) PointerPos() (x, y int) {
+func (wm *WM) PointerPos() Point {
 	ptr, err := xproto.QueryPointer(wm.X.Conn(), wm.Root.Id).Reply()
 	if err != nil {
 		log.Println("Could not query pointer position:", err)
-		return 0, 0
+		return Point{}
 	}
-	return int(ptr.RootX), int(ptr.RootY)
+	return Point{int(ptr.RootX), int(ptr.RootY)}
 }
 
 func (wm *WM) CurrentScreen() Geometry {
 	screens := wm.Screens()
-	cx, cy := wm.PointerPos()
-	return screenForPoint(screens, cx, cy)
+	return screenForPoint(screens, wm.PointerPos())
 }
 
 func (wm *WM) debug() {
@@ -1383,10 +1374,10 @@ func (wm *WM) Restart() {
 	syscall.Exec(os.Args[0], os.Args, os.Environ())
 }
 
-func (wm *WM) WarpPointer(x, y int) {
-	px, py := wm.PointerPos()
-	dx := x - px
-	dy := y - py
+func (wm *WM) WarpPointer(d Point) {
+	s := wm.PointerPos()
+	dx := d.X - s.X
+	dy := d.Y - s.Y
 	xproto.WarpPointer(wm.X.Conn(), xproto.WindowNone, xproto.WindowNone, 0, 0, 0, 0, int16(dx), int16(dy))
 }
 
@@ -1463,11 +1454,11 @@ func (wm *WM) windowSearchMenu() {
 }
 
 func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc) (*menu.Menu, error) {
-	px, py := wm.PointerPos()
+	p := wm.PointerPos()
 	sc := wm.CurrentScreen().subtractGap(wm.Config.Gap)
 	m, err := menu.New(wm.X, title, menu.Config{
-		X:           px,
-		Y:           py,
+		X:           p.X,
+		Y:           p.Y,
 		MinY:        wm.Config.Gap.Top,
 		MaxHeight:   sc.Height,
 		BorderWidth: wm.Config.BorderWidth,
