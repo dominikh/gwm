@@ -154,11 +154,15 @@ func (m *Menu) escape(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
 
 func (m *Menu) keypress(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
 	key := keybind.LookupString(xu, ev.State, ev.Detail)
-	if len([]rune(key)) == 1 {
-		m.input += key
-		m.filter()
-		m.draw()
+	if (ev.State & xproto.ModMaskControl) > 0 {
+		return
 	}
+	if len([]rune(key)) > 1 {
+		return
+	}
+	m.input += key
+	m.filter()
+	m.draw()
 }
 
 func (m *Menu) connectEvents() error {
@@ -172,8 +176,10 @@ func (m *Menu) connectEvents() error {
 		fn  keybind.KeyPressFun
 		key string
 	}{
-		{m.down, "Down"},
 		{m.up, "Up"},
+		{m.up, "control-r"},
+		{m.down, "Down"},
+		{m.down, "control-s"},
 		{m.backspace, "BackSpace"},
 		{m.escape, "Escape"},
 		{m.enter, "Return"},
