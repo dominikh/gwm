@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -743,10 +744,10 @@ func (win *Window) markActive() {
 		LogWindowEvent(win, "not focusable, skipping")
 		return
 	}
-	win.SetBorderColor(win.wm.Config.Colors["activeborder"])
+	win.SetBorderColor(win.wm.Color(win.wm.Config.Colors["activeborder"]))
 	win.Focus()
 	if curwin := win.wm.CurWindow; curwin != nil {
-		curwin.SetBorderColor(win.wm.Config.Colors["inactiveborder"])
+		curwin.SetBorderColor(win.wm.Color(win.wm.Config.Colors["inactiveborder"]))
 	}
 	win.wm.CurWindow = win
 }
@@ -814,7 +815,7 @@ func (win *Window) Init() {
 	should(win.Listen(xproto.EventMaskEnterWindow,
 		xproto.EventMaskStructureNotify))
 	win.SetBorderWidth(win.wm.Config.BorderWidth)
-	win.SetBorderColor(win.wm.Config.Colors["inactiveborder"])
+	win.SetBorderColor(win.wm.Color(win.wm.Config.Colors["inactiveborder"]))
 
 	attr, err := xproto.GetGeometry(win.wm.X.Conn(), xproto.Drawable(win.Id)).Reply()
 	if err != nil {
@@ -1155,6 +1156,7 @@ type WM struct {
 	CurWindow *Window
 	chFn      chan func()
 	font      xproto.Font
+	colors    map[string]int
 }
 
 func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
@@ -1460,7 +1462,7 @@ func (wm *WM) newMenu(title string, entries []menu.Entry, filter menu.FilterFunc
 		MinY:        wm.Config.Gap.Top,
 		MaxHeight:   sc.Height,
 		BorderWidth: wm.Config.BorderWidth,
-		BorderColor: wm.Config.Colors["activeborder"],
+		BorderColor: wm.Color(wm.Config.Colors["activeborder"]),
 		Font:        wm.font,
 		FilterFn:    filter,
 	})
@@ -1546,6 +1548,32 @@ func (wm *WM) announce() {
 		int(wm.X.TimeGet()), int(manSelAtom), int(wm.X.Dummy()))
 	must(err)
 	xproto.SendEvent(wm.X.Conn(), false, wm.X.RootWin(), xproto.EventMaskStructureNotify, string(cm.Bytes()))
+}
+
+func (wm *WM) Color(name string) int {
+	if color, ok := wm.colors[name]; ok {
+		return color
+	}
+
+	if name[0] == '#' {
+		i, err := strconv.ParseInt(name[1:], 16, 32)
+		// XXX Go issue 7105
+		if err != nil {
+			i = 0
+		}
+		wm.colors[name] = int(i)
+		return int(i)
+	}
+
+	reply, err := xproto.LookupColor(wm.X.Conn(), wm.X.Screen().DefaultColormap, uint16(len(name)), name).Reply()
+	should(err)
+	color := int(reply.ExactRed/256)<<16 | int(reply.ExactGreen/256)<<8 | int(reply.ExactBlue/256)
+	// XXX Go issue 7105
+	if err != nil {
+		color = 0
+	}
+	wm.colors[name] = color
+	return color
 }
 
 func (wm *WM) Init(xu *xgbutil.XUtil) {
@@ -1662,6 +1690,7 @@ func main() {
 		Cursors: make(map[string]xproto.Cursor),
 		Windows: make(map[xproto.Window]*Window),
 		chFn:    make(chan func()),
+		colors:  make(map[string]int),
 	}
 	xu, err := xgbutil.NewConn()
 	must(err)
