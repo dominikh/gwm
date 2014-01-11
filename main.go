@@ -594,10 +594,7 @@ func (win *Window) Fullscreen() {
 	sc := win.Screen()
 	win.unfullscreenGeom = win.Geom
 	win.SetBorderWidth(0)
-	win.Geom.X = sc.X
-	win.Geom.Y = sc.Y
-	win.Geom.Width = sc.Width
-	win.Geom.Height = sc.Height
+	win.Geom = sc
 	win.moveAndResizeNoReset()
 	win.fullscreen = true
 	win.Freeze()
