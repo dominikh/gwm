@@ -773,11 +773,7 @@ func (win *Window) Focusable() bool {
 func (win *Window) DestroyNotify(xu *xgbutil.XUtil, ev xevent.DestroyNotifyEvent) {
 	LogWindowEvent(win, "Destroying")
 	win.Detach()
-	if win.overlay != nil {
-		win.overlay.Detach()
-		delete(win.wm.Windows, win.overlay.Id)
-		win.overlay = nil
-	}
+	win.overlay = nil
 	delete(win.wm.Windows, win.Id)
 }
 
@@ -817,8 +813,6 @@ func (win *Window) WriteToOverlay(s string) {
 func (win *Window) Init() {
 	// TODO do something if the state is iconified
 	LogWindowEvent(win, "Initializing")
-	should(win.Listen(xproto.EventMaskEnterWindow,
-		xproto.EventMaskStructureNotify))
 	win.SetBorderWidth(win.wm.Config.BorderWidth)
 	win.SetBorderColor(win.wm.Color(win.wm.Config.Colors["inactiveborder"]))
 
@@ -1274,6 +1268,9 @@ func (wm *WM) NewWindow(c xproto.Window) *Window {
 			win.State = icccm.StateNormal
 		}
 	}
+
+	should(win.Listen(xproto.EventMaskEnterWindow,
+		xproto.EventMaskStructureNotify))
 
 	xevent.UnmapNotifyFun(win.UnmapNotify).Connect(win.wm.X, win.Id)
 	xevent.DestroyNotifyFun(win.DestroyNotify).Connect(win.wm.X, win.Id)
