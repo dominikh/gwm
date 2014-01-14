@@ -781,7 +781,7 @@ func (win *Window) UnmapNotify(xu *xgbutil.XUtil, ev xevent.UnmapNotifyEvent) {
 	LogWindowEvent(win, "Unmapping")
 	win.Mapped = false
 	win.State = icccm.StateWithdrawn
-	should(icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)}))
+	icccm.WmStateSet(win.wm.X, win.Id, &icccm.WmState{State: uint(win.State)})
 }
 
 func (win *Window) ShowOverlay() {
