@@ -789,7 +789,6 @@ func (win *Window) ShowOverlay() {
 		return
 	}
 	win.overlay.Map()
-
 }
 
 func (win *Window) HideOverlay() {
@@ -797,7 +796,6 @@ func (win *Window) HideOverlay() {
 		return
 	}
 	win.overlay.Unmap()
-
 }
 
 func (win *Window) WriteToOverlay(s string) {
@@ -805,8 +803,7 @@ func (win *Window) WriteToOverlay(s string) {
 		return
 	}
 	draw.Fill(win.overlay, win.overlay.Geom.Width, win.overlay.Geom.Height, 0xFFFFFF)
-	w, h := draw.Text(win.overlay, s,
-		win.wm.font, 0, 0xFFFFFF, 0, 0)
+	w, h := draw.Text(win.overlay, s, win.wm.font, 0, 0xFFFFFF, 0, 0)
 	win.overlay.Resize(w, h)
 }
 
