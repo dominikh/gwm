@@ -1264,17 +1264,15 @@ func (wm *WM) NewWindow(c xproto.Window) *Window {
 	wm.Windows[c] = win
 
 	attr := win.Attributes()
-	if attr == nil {
-		return win
-	}
-
-	switch attr.MapState {
-	case xproto.MapStateUnmapped:
-		// TODO how do we differentiate between withdrawn and iconified?
-		win.State = icccm.StateWithdrawn
-	case xproto.MapStateUnviewable, xproto.MapStateViewable:
-		win.Mapped = true
-		win.State = icccm.StateNormal
+	if attr != nil {
+		switch attr.MapState {
+		case xproto.MapStateUnmapped:
+			// TODO how do we differentiate between withdrawn and iconified?
+			win.State = icccm.StateWithdrawn
+		case xproto.MapStateUnviewable, xproto.MapStateViewable:
+			win.Mapped = true
+			win.State = icccm.StateNormal
+		}
 	}
 
 	xevent.UnmapNotifyFun(win.UnmapNotify).Connect(win.wm.X, win.Id)
