@@ -1187,6 +1187,7 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 
 	win.moveNoReset()
 	win.Map()
+	win.Raise()
 	// TODO probably should
 	// a) store the border width in every client
 	// b) use that for all calculations involving the border width
