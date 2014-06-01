@@ -1289,7 +1289,9 @@ func (wm *WM) RelevantQueryTree() []xproto.Window {
 	var wins []xproto.Window
 	for _, c := range tree {
 		attr, err := xproto.GetWindowAttributes(wm.X.Conn(), c).Reply()
-		must(err)
+		if err != nil {
+			continue
+		}
 		if attr.OverrideRedirect || attr.MapState != xproto.MapStateViewable {
 			continue
 		}
