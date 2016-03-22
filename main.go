@@ -1176,8 +1176,8 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	if err != nil || (normalHints.Flags&(icccm.SizeHintPPosition|icccm.SizeHintUSPosition) == 0) {
 		if win.maximized == 0 && !win.fullscreen {
 			ptr := win.wm.PointerPos()
-			win.Geom.X = int(ptr.X) - win.Geom.Width/2
-			win.Geom.Y = int(ptr.Y) - win.Geom.Height/2
+			win.Geom.X = ptr.X - win.Geom.Width/2
+			win.Geom.Y = ptr.Y - win.Geom.Height/2
 		}
 	}
 
