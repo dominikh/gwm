@@ -315,6 +315,10 @@ func (m *Menu) draw() {
 			fg = 0xFFFFFF
 			bg = 0
 		}
+		if len(s) > 255 {
+			s = s[:255]
+		}
+
 		w, h := draw.Text(m, s, m.font, fg, bg, 0, m.height)
 		m.height += h
 		if w > m.width {
