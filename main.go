@@ -1664,6 +1664,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	}))
 
 	must(ewmh.SupportingWmCheckSet(wm.X, wm.Root.Id, wm.X.Dummy()))
+	must(ewmh.SupportingWmCheckSet(wm.X, wm.X.Dummy(), wm.X.Dummy()))
 	must(ewmh.WmNameSet(wm.X, wm.X.Dummy(), "gwm"))
 
 	before, after, quit := xevent.MainPing(wm.X)
