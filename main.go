@@ -1232,6 +1232,14 @@ func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEven
 		win.Geom.Y = int(ev.Y)
 	}
 
+	if win.Geom.X < 0 {
+		win.Geom.X = 0
+	}
+
+	if win.Geom.Y < 0 {
+		win.Geom.Y = 0
+	}
+
 	// TODO stack order, border width, sibling
 
 	win.Configure(int(ev.ValueMask) & ^(xproto.ConfigWindowSibling|xproto.ConfigWindowStackMode),
