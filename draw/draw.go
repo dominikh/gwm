@@ -89,7 +89,7 @@ func toChar2b(runes []rune) ([]xproto.Char2b, int) {
 	ucs2 := utf16.Encode(runes)
 	var chars []xproto.Char2b
 	for _, r := range ucs2 {
-		chars = append(chars, xproto.Char2b{byte(r >> 8), byte(r)})
+		chars = append(chars, xproto.Char2b{Byte1: byte(r >> 8), Byte2: byte(r)})
 	}
 	return chars, len(runes)
 }

@@ -908,15 +908,15 @@ func (win *Window) ClientMessage(xu *xgbutil.XUtil, ev xevent.ClientMessageEvent
 
 		switch data[2] {
 		case ewmh.Move:
-			mousebind.DragBegin(win.wm.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
+			mousebind.DragBegin(win.wm.X, xevent.ButtonPressEvent{ButtonPressEvent: ev}, win.Id, win.Id,
 				win.MoveBegin, win.MoveStep, win.MoveEnd)
 			return
 		case ewmh.MoveKeyboard, ewmh.SizeKeyboard:
 			return
 		case ewmh.Cancel:
-			mousebind.DragEnd(win.wm.X, xevent.ButtonReleaseEvent{(*xproto.ButtonReleaseEvent)(ev)})
+			mousebind.DragEnd(win.wm.X, xevent.ButtonReleaseEvent{ButtonReleaseEvent: (*xproto.ButtonReleaseEvent)(ev)})
 		default:
-			mousebind.DragBegin(win.wm.X, xevent.ButtonPressEvent{ev}, win.Id, win.Id,
+			mousebind.DragBegin(win.wm.X, xevent.ButtonPressEvent{ButtonPressEvent: ev}, win.Id, win.Id,
 				win.ResizeBegin, win.ResizeStep, win.ResizeEnd)
 		}
 	default:
@@ -1195,7 +1195,7 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 	if (hints.Flags & icccm.HintState) == 0 {
 		hints.InitialState = icccm.StateNormal
 	}
-	icccm.WmStateSet(wm.X, win.Id, &icccm.WmState{hints.InitialState, 0})
+	icccm.WmStateSet(wm.X, win.Id, &icccm.WmState{State: hints.InitialState, Icon: 0})
 	win.State = State(hints.InitialState)
 
 	win.SendStructureNotify()
