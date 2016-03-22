@@ -753,11 +753,7 @@ func (win *Window) markActive() {
 }
 
 func (win *Window) Focus() {
-	if win.SupportsProtocol("WM_TAKE_FOCUS") {
-		win.SendMessage("WM_TAKE_FOCUS")
-	} else {
-		win.Window.Focus()
-	}
+	win.Window.Focus()
 	should(ewmh.ActiveWindowSet(win.wm.X, win.Id))
 }
 
@@ -1649,7 +1645,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	should(ewmh.CurrentDesktopSet(wm.X, 0))
 	should(ewmh.DesktopViewportSet(wm.X, nil))
 	should(ewmh.SupportedSet(wm.X, []string{
-		"WM_TAKE_FOCUS",
+		// "WM_TAKE_FOCUS",
 		"_NET_ACTIVE_WINDOW",
 		"_NET_WM_MOVERESIZE",
 		"_NET_SUPPORTED",
