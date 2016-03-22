@@ -1598,7 +1598,9 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 
 	name := "-Misc-Fixed-Bold-R-Normal--18-120-100-100-C-90-ISO10646-1"
 	err = xproto.OpenFontChecked(xu.Conn(), wm.font, uint16(len(name)), name).Check()
-	must(err)
+	if err != nil {
+		log.Fatalln("couldn't load font:", err)
+	}
 
 	mousebind.Initialize(wm.X)
 	keybind.Initialize(wm.X)
