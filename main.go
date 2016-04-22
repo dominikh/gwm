@@ -313,9 +313,7 @@ func (win *Window) Raise() {
 
 	var update []*Window
 	for layer := LayerDesktop; layer <= LayerAbove; layer++ {
-		for _, ow := range windows[layer] {
-			update = append(update, ow)
-		}
+		update = append(update, windows[layer]...)
 	}
 	win.wm.Restack(update)
 }
@@ -333,9 +331,7 @@ func (win *Window) Lower() {
 
 	var update []*Window
 	for layer := LayerDesktop; layer <= LayerAbove; layer++ {
-		for _, ow := range windows[layer] {
-			update = append(update, ow)
-		}
+		update = append(update, windows[layer]...)
 	}
 	win.wm.Restack(update)
 }
@@ -1058,9 +1054,7 @@ func (win *Window) SetLayer(layer Layer) {
 
 	var update []*Window
 	for layer := LayerDesktop; layer <= LayerAbove; layer++ {
-		for _, ow := range windows[layer] {
-			update = append(update, ow)
-		}
+		update = append(update, windows[layer]...)
 	}
 	win.wm.Restack(update)
 }
