@@ -813,6 +813,9 @@ func (win *Window) Init() {
 		win.Geom.Width = int(attr.Width)
 		win.Geom.Height = int(attr.Height)
 	}
+	if win.Geom.Y > win.Screen().Height {
+		win.Geom.Y = win.Screen().Height - win.Geom.Height
+	}
 
 	states, err := ewmh.WmStateGet(win.wm.X, win.Id)
 	if err != nil {
