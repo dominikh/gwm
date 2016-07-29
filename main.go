@@ -224,6 +224,7 @@ const (
 	MaximizedH    MaximizedState = 1
 	MaximizedV    MaximizedState = 2
 	MaximizedFull MaximizedState = 3
+	Fullscreen    MaximizedState = 4
 )
 
 type Point struct {
@@ -252,15 +253,13 @@ type Window struct {
 	*xwindow.Window
 	State             State
 	Layer             Layer
+	Layout            Layout
 	Mapped            bool
-	Geom              Geometry
 	BorderWidth       int
 	wm                *WM
 	curDrag           *drag
 	unmaximizedGeom   Geometry
 	unfullscreenGeom  Geometry
-	maximized         MaximizedState
-	fullscreen        bool
 	unfullscreenLayer Layer
 	frozen            bool
 	overlay           *Window
@@ -340,7 +339,7 @@ func (win *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int
 	win.Raise()
 	win.curDrag = &drag{
 		pointer: win.wm.PointerPos(),
-		start:   Point{win.Geom.X, win.Geom.Y},
+		start:   Point{win.Layout.X, win.Layout.Y},
 		offset:  Point{rootX, rootY},
 		corner:  cornerNone,
 	}
@@ -355,15 +354,15 @@ func (win *Window) MoveStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int)
 	dy := rootY - win.curDrag.offset.Y
 
 	// FIXME do we need to consider the border here?
-	win.Geom.X = win.curDrag.start.X + dx
-	win.Geom.Y = win.curDrag.start.Y + dy
+	win.Layout.X = win.curDrag.start.X + dx
+	win.Layout.Y = win.curDrag.start.Y + dy
 
 	screen := win.Screen()
 	screen = screen.subtractGap(win.wm.Config.Gap)
 
-	win.Geom.X += snapcalc(win.Geom.X, win.Geom.X+win.Geom.Width+win.BorderWidth*2,
+	win.Layout.X += snapcalc(win.Layout.X, win.Layout.X+win.Layout.Width+win.BorderWidth*2,
 		screen.X, screen.X+screen.Width, win.wm.Config.Snapdist)
-	win.Geom.Y += snapcalc(win.Geom.Y, win.Geom.Y+win.Geom.Height+win.BorderWidth*2,
+	win.Layout.Y += snapcalc(win.Layout.Y, win.Layout.Y+win.Layout.Height+win.BorderWidth*2,
 		screen.Y, screen.Y+screen.Height, win.wm.Config.Snapdist)
 	win.move()
 }
@@ -386,19 +385,19 @@ func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY i
 		cursorX, cursorY string
 	)
 
-	if eventX > win.Geom.Width/2 {
+	if eventX > win.Layout.Width/2 {
 		corner |= cornerE
 		cursorX = "right"
-		x = win.Geom.Width
+		x = win.Layout.Width
 	} else {
 		corner |= cornerW
 		cursorX = "left"
 	}
 
-	if eventY > win.Geom.Height/2 {
+	if eventY > win.Layout.Height/2 {
 		corner |= cornerS
 		cursorY = "bottom"
-		y = win.Geom.Height
+		y = win.Layout.Height
 	} else {
 		corner |= cornerN
 		cursorY = "top"
@@ -406,7 +405,7 @@ func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY i
 
 	win.curDrag = &drag{
 		pointer: win.wm.PointerPos(),
-		start:   Point{win.Geom.X, win.Geom.Y},
+		start:   Point{win.Layout.X, win.Layout.Y},
 		offset:  Point{rootX, rootY},
 		corner:  corner,
 	}
@@ -479,29 +478,29 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 	// different function, so that keyboard resizing can reuse it
 
 	if (win.curDrag.corner & cornerW) > 0 {
-		dw = win.Geom.X - rootX
+		dw = win.Layout.X - rootX
 		dw = roundDown(dw, wInc)
 		dx = -dw
 	}
 
 	if (win.curDrag.corner & cornerE) > 0 {
-		dw = rootX - (win.Geom.X + win.Geom.Width)
+		dw = rootX - (win.Layout.X + win.Layout.Width)
 		dw = roundDown(dw, wInc)
 	}
 
 	if (win.curDrag.corner & cornerS) > 0 {
-		dh = rootY - (win.Geom.Y + win.Geom.Height)
+		dh = rootY - (win.Layout.Y + win.Layout.Height)
 		dh = roundDown(dh, hInc)
 	}
 
 	if (win.curDrag.corner & cornerN) > 0 {
-		dh = win.Geom.Y - rootY
+		dh = win.Layout.Y - rootY
 		dh = roundDown(dh, hInc)
 		dy = -dh
 	}
 
-	nh := win.Geom.Height + dh
-	nw := win.Geom.Width + dw
+	nh := win.Layout.Height + dh
+	nw := win.Layout.Width + dw
 
 	if hasAspect {
 		nw -= wBase
@@ -514,7 +513,7 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 		}
 
 		if dx != 0 {
-			dx -= nw - (win.Geom.Width + dw)
+			dx -= nw - (win.Layout.Width + dw)
 		}
 
 		nw += wBase
@@ -522,24 +521,24 @@ func (win *Window) ResizeStep(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY in
 	}
 
 	if nh >= hMin && (!hasMax || nh <= hMax) {
-		win.Geom.Height = nh
-		win.Geom.Y += dy
+		win.Layout.Height = nh
+		win.Layout.Y += dy
 	}
 
 	if nw >= wMin && (!hasMax || nw <= wMax) {
-		win.Geom.Width = nw
-		win.Geom.X += dx
+		win.Layout.Width = nw
+		win.Layout.X += dx
 	}
 
 	win.moveAndResize()
-	win.WriteToOverlay(fmt.Sprintf("%d × %d", win.Geom.Width, win.Geom.Height))
+	win.WriteToOverlay(fmt.Sprintf("%d × %d", win.Layout.Width, win.Layout.Height))
 }
 
 func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) {
 	win.HideOverlay()
-	if win.Geom.Contains(win.curDrag.pointer) {
+	if win.Layout.Contains(win.curDrag.pointer) {
 		win.wm.WarpPointer(win.curDrag.pointer)
-	} else if !win.Geom.Contains(Point{rootX, rootY}) {
+	} else if !win.Layout.Contains(Point{rootX, rootY}) {
 		win.CenterPointer()
 	}
 	win.curDrag = nil
@@ -547,24 +546,24 @@ func (win *Window) ResizeEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int
 
 func (win *Window) Move(x, y int) {
 	// TODO document that this function will reset the maximized state
-	win.Geom.X = x
-	win.Geom.Y = y
+	win.Layout.X = x
+	win.Layout.Y = y
 	win.move()
 }
 
 func (win *Window) Resize(w, h int) {
-	win.Geom.Width = w
-	win.Geom.Height = h
+	win.Layout.Width = w
+	win.Layout.Height = h
 	win.resize()
 }
 
 func (win *Window) MoveAndResize(x, y, width, height int) {
 	// FIXME respect min/max size and increments
 	// TODO document that this function will reset the maximized state
-	win.Geom.X = x
-	win.Geom.Y = y
-	win.Geom.Width = width
-	win.Geom.Height = height
+	win.Layout.X = x
+	win.Layout.Y = y
+	win.Layout.Width = width
+	win.Layout.Height = height
 	win.moveAndResize()
 }
 
@@ -581,18 +580,18 @@ func (win *Window) ToggleFreeze() {
 }
 
 func (win *Window) Fullscreen() {
-	if win.fullscreen {
+	if win.Layout.State == Fullscreen {
 		return
 	}
 
 	// TODO what about min/max size and increments?
 
 	sc := win.Screen()
-	win.unfullscreenGeom = win.Geom
+	win.unfullscreenGeom = win.Layout.Geometry
 	win.SetBorderWidth(0)
-	win.Geom = sc
+	win.Layout.Geometry = sc
 	win.moveAndResizeNoReset()
-	win.fullscreen = true
+	win.Layout.State = Fullscreen
 	win.Freeze()
 	win.unfullscreenLayer = win.Layer
 	win.SetLayer(LayerAbove)
@@ -601,21 +600,22 @@ func (win *Window) Fullscreen() {
 }
 
 func (win *Window) Unfullscreen() {
-	if !win.fullscreen {
+
+	if win.Layout.State != Fullscreen {
 		return
 	}
 
-	win.Geom = win.unfullscreenGeom
+	win.Layout.Geometry = win.unfullscreenGeom
 	win.SetBorderWidth(win.wm.Config.BorderWidth)
 	win.moveAndResizeNoReset()
-	win.fullscreen = false
+	win.Layout.State = 0
 	win.Unfreeze()
 	win.SetLayer(win.unfullscreenLayer)
 	win.updateWmState()
 }
 
 func (win *Window) ToggleFullscreen() {
-	if win.fullscreen {
+	if win.Layout.State == Fullscreen {
 		win.Unfullscreen()
 	} else {
 		win.Fullscreen()
@@ -626,43 +626,43 @@ func (win *Window) Maximize(state MaximizedState) {
 	// TODO what about min/max size and increments?
 
 	// Only store the geometry if we're not maximized at all yet
-	if win.maximized == 0 {
-		win.unmaximizedGeom = win.Geom
+	if win.Layout.State == 0 {
+		win.unmaximizedGeom = win.Layout.Geometry
 	}
 
 	sc := win.Screen().subtractGap(win.wm.Config.Gap)
 	if (state & MaximizedH) > 0 {
-		win.Geom.X = sc.X
-		win.Geom.Width = sc.Width - 2*win.wm.Config.BorderWidth
+		win.Layout.X = sc.X
+		win.Layout.Width = sc.Width - 2*win.wm.Config.BorderWidth
 	}
 	if (state & MaximizedV) > 0 {
-		win.Geom.Y = sc.Y
-		win.Geom.Height = sc.Height - 2*win.wm.Config.BorderWidth
+		win.Layout.Y = sc.Y
+		win.Layout.Height = sc.Height - 2*win.wm.Config.BorderWidth
 	}
 	win.moveAndResizeNoReset()
-	win.maximized |= state
+	win.Layout.State |= state
 	win.updateWmState()
 }
 
 func (win *Window) Unmaximize(state MaximizedState) {
 	if (state & MaximizedH) > 0 {
-		win.Geom.X = win.unmaximizedGeom.X
-		win.Geom.Width = win.unmaximizedGeom.Width
+		win.Layout.X = win.unmaximizedGeom.X
+		win.Layout.Width = win.unmaximizedGeom.Width
 	}
 	if (state & MaximizedV) > 0 {
-		win.Geom.Y = win.unmaximizedGeom.Y
-		win.Geom.Height = win.unmaximizedGeom.Height
+		win.Layout.Y = win.unmaximizedGeom.Y
+		win.Layout.Height = win.unmaximizedGeom.Height
 	}
 	win.moveAndResize()
 	if !win.ContainsPointer() {
 		win.CenterPointer()
 	}
-	win.maximized &= ^state
+	win.Layout.State &= ^state
 	win.updateWmState()
 }
 
 func (win *Window) ToggleMaximize(state MaximizedState) {
-	if state > win.maximized || win.maximized&state == 0 {
+	if state > win.Layout.State || win.Layout.State&state == 0 {
 		win.Maximize(state)
 	} else {
 		win.Unmaximize(state)
@@ -670,52 +670,52 @@ func (win *Window) ToggleMaximize(state MaximizedState) {
 }
 
 func (win *Window) ContainsPointer() bool {
-	return win.Geom.Contains(win.wm.PointerPos())
+	return win.Layout.Contains(win.wm.PointerPos())
 }
 
 func (win *Window) CenterPointer() {
 	xproto.WarpPointer(win.wm.X.Conn(), xproto.WindowNone, win.Id, 0, 0, 0, 0,
-		int16(win.Geom.Width/2-win.wm.Config.BorderWidth), int16(win.Geom.Height/2-win.wm.Config.BorderWidth))
+		int16(win.Layout.Width/2-win.wm.Config.BorderWidth), int16(win.Layout.Height/2-win.wm.Config.BorderWidth))
 }
 
 // move moves the window based on its current Geom. It also resets the
 // window's maximized state.
 func (win *Window) move() {
-	win.Window.Move(win.Geom.X, win.Geom.Y)
-	win.maximized &= ^MaximizedFull
+	win.Window.Move(win.Layout.X, win.Layout.Y)
+	win.Layout.State &= ^MaximizedFull
 	win.updateWmState()
 }
 
 // resize resizes the window based on its current Geom. It also resets
 // the window's maximized state.
 func (win *Window) resize() {
-	win.Window.Resize(win.Geom.Width, win.Geom.Height)
-	win.maximized &= ^MaximizedFull
+	win.Window.Resize(win.Layout.Width, win.Layout.Height)
+	win.Layout.State &= ^MaximizedFull
 	win.updateWmState()
 }
 
 // moveAndResize moves and resizes the window based on its current
 // Geom. It also resets the window's maximized state.
 func (win *Window) moveAndResize() {
-	win.Window.MoveResize(win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
-	win.maximized &= ^MaximizedFull
+	win.Window.MoveResize(win.Layout.X, win.Layout.Y, win.Layout.Width, win.Layout.Height)
+	win.Layout.State &= ^MaximizedFull
 	win.updateWmState()
 }
 
 // move moves the window based on its current Geom.
 func (win *Window) moveNoReset() {
-	win.Window.Move(win.Geom.X, win.Geom.Y)
+	win.Window.Move(win.Layout.X, win.Layout.Y)
 }
 
 // resize resizes the window based on its current Geom.
 func (win *Window) resizeNoReset() {
-	win.Window.Resize(win.Geom.Width, win.Geom.Height)
+	win.Window.Resize(win.Layout.Width, win.Layout.Height)
 }
 
 // moveAndResize moves and resizes the window based on its current
 // Geom.
 func (win *Window) moveAndResizeNoReset() {
-	win.Window.MoveResize(win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
+	win.Window.MoveResize(win.Layout.X, win.Layout.Y, win.Layout.Width, win.Layout.Height)
 }
 
 func (win *Window) EnterNotify(xu *xgbutil.XUtil, ev xevent.EnterNotifyEvent) {
@@ -793,7 +793,7 @@ func (win *Window) WriteToOverlay(s string) {
 	if win.overlay == nil {
 		return
 	}
-	draw.Fill(win.overlay, win.overlay.Geom.Width, win.overlay.Geom.Height, 0xFFFFFF)
+	draw.Fill(win.overlay, win.overlay.Geom.Width(), win.overlay.Geom.Height(), 0xFFFFFF)
 	w, h := draw.Text(win.overlay, s, win.wm.font, 0, 0xFFFFFF, 0, 0)
 	win.overlay.Resize(w, h)
 }
@@ -808,13 +808,13 @@ func (win *Window) Init() {
 	if err != nil {
 		should(err)
 	} else {
-		win.Geom.X = int(attr.X)
-		win.Geom.Y = int(attr.Y)
-		win.Geom.Width = int(attr.Width)
-		win.Geom.Height = int(attr.Height)
+		win.Layout.X = int(attr.X)
+		win.Layout.Y = int(attr.Y)
+		win.Layout.Width = int(attr.Width)
+		win.Layout.Height = int(attr.Height)
 	}
-	if win.Geom.Y > win.Screen().Height {
-		win.Geom.Y = win.Screen().Height - win.Geom.Height
+	if win.Layout.Y > win.Screen().Height {
+		win.Layout.Y = win.Screen().Height - win.Layout.Height
 	}
 
 	states, err := ewmh.WmStateGet(win.wm.X, win.Id)
@@ -895,8 +895,8 @@ func (win *Window) ClientMessage(xu *xgbutil.XUtil, ev xevent.ClientMessageEvent
 			Root:     win.wm.Root.Id,
 			RootX:    int16(data[0]),
 			RootY:    int16(data[1]),
-			EventX:   int16(data[0]) - int16(win.Geom.X),
-			EventY:   int16(data[1]) - int16(win.Geom.Y),
+			EventX:   int16(data[0]) - int16(win.Layout.X),
+			EventY:   int16(data[1]) - int16(win.Layout.Y),
 			// FIXME what about Event, Child, State and SameScreen?
 		}
 
@@ -1064,15 +1064,15 @@ func (win *Window) SetLayer(layer Layer) {
 
 func (win *Window) SendStructureNotify() {
 	LogWindowEvent(win, "Sending StructureNotify")
-	log.Printf("\tX: %d Y: %d W: %d H: %d", win.Geom.X, win.Geom.Y, win.Geom.Width, win.Geom.Height)
+	log.Printf("\tX: %d Y: %d W: %d H: %d", win.Layout.X, win.Layout.Y, win.Layout.Width, win.Layout.Height)
 	ev := xproto.ConfigureNotifyEvent{
 		Event:            win.Id,
 		Window:           win.Id,
 		AboveSibling:     xevent.NoWindow,
-		X:                int16(win.Geom.X),
-		Y:                int16(win.Geom.Y),
-		Width:            uint16(win.Geom.Width),
-		Height:           uint16(win.Geom.Height),
+		X:                int16(win.Layout.X),
+		Y:                int16(win.Layout.Y),
+		Width:            uint16(win.Layout.Width),
+		Height:           uint16(win.Layout.Height),
 		BorderWidth:      1, // TODO settings
 		OverrideRedirect: false,
 	}
@@ -1105,8 +1105,8 @@ func (win *Window) Class() (name string, class string) {
 }
 
 func (win *Window) Center() Point {
-	return Point{win.Geom.X + win.Geom.Width/2,
-		win.Geom.Y + win.Geom.Height/2}
+	return Point{win.Layout.X + win.Layout.Width/2,
+		win.Layout.Y + win.Layout.Height/2}
 }
 
 func (win *Window) Screen() Geometry {
@@ -1116,13 +1116,13 @@ func (win *Window) Screen() Geometry {
 
 func (win *Window) updateWmState() {
 	var atoms []string
-	if (win.maximized & MaximizedH) > 0 {
+	if (win.Layout.State & MaximizedH) > 0 {
 		atoms = append(atoms, "_NET_WM_STATE_MAXIMIZED_HORZ")
 	}
-	if (win.maximized & MaximizedV) > 0 {
+	if (win.Layout.State & MaximizedV) > 0 {
 		atoms = append(atoms, "_NET_WM_STATE_MAXIMIZED_VERT")
 	}
-	if win.fullscreen {
+	if win.Layout.State == Fullscreen {
 		atoms = append(atoms, "_NET_WM_STATE_FULLSCREEN")
 	}
 	if win.Layer == LayerAbove {
@@ -1170,10 +1170,10 @@ func (wm *WM) MapRequest(xu *xgbutil.XUtil, ev xevent.MapRequestEvent) {
 
 	normalHints, err := icccm.WmNormalHintsGet(win.wm.X, win.Id)
 	if err != nil || (normalHints.Flags&(icccm.SizeHintPPosition|icccm.SizeHintUSPosition) == 0) {
-		if win.maximized == 0 && !win.fullscreen {
+		if win.Layout.State == 0 && win.Layout.State != Fullscreen {
 			ptr := win.wm.PointerPos()
-			win.Geom.X = ptr.X - win.Geom.Width/2
-			win.Geom.Y = ptr.Y - win.Geom.Height/2
+			win.Layout.X = ptr.X - win.Layout.Width/2
+			win.Layout.Y = ptr.Y - win.Layout.Height/2
 		}
 	}
 
@@ -1212,33 +1212,33 @@ func (wm *WM) ConfigureRequest(xu *xgbutil.XUtil, ev xevent.ConfigureRequestEven
 	m := ev.ValueMask
 
 	if (m & xproto.ConfigWindowWidth) > 0 {
-		win.Geom.Width = int(ev.Width)
+		win.Layout.Width = int(ev.Width)
 	}
 	if (m & xproto.ConfigWindowHeight) > 0 {
-		win.Geom.Height = int(ev.Height)
+		win.Layout.Height = int(ev.Height)
 	}
 	if (m & xproto.ConfigWindowX) > 0 {
-		win.Geom.X = int(ev.X)
+		win.Layout.X = int(ev.X)
 	}
 	if (m & xproto.ConfigWindowY) > 0 {
-		win.Geom.Y = int(ev.Y)
+		win.Layout.Y = int(ev.Y)
 	}
 
-	if win.Geom.X < 0 {
-		win.Geom.X = 0
+	if win.Layout.X < 0 {
+		win.Layout.X = 0
 	}
 
-	if win.Geom.Y < 0 {
-		win.Geom.Y = 0
+	if win.Layout.Y < 0 {
+		win.Layout.Y = 0
 	}
 
 	// TODO stack order, border width, sibling
 
 	win.Configure(int(ev.ValueMask) & ^(xproto.ConfigWindowSibling|xproto.ConfigWindowStackMode),
-		win.Geom.X,
-		win.Geom.Y,
-		win.Geom.Width,
-		win.Geom.Height,
+		win.Layout.X,
+		win.Layout.Y,
+		win.Layout.Width,
+		win.Layout.Height,
 		0,
 		0,
 	)
@@ -1720,7 +1720,7 @@ func winmovefunc(xf, yf int) func(*WM) {
 		win := wm.CurWindow
 		dx := xf * wm.Config.MoveAmount
 		dy := yf * wm.Config.MoveAmount
-		win.Move(win.Geom.X+dx, win.Geom.Y+dy)
+		win.Move(win.Layout.X+dx, win.Layout.Y+dy)
 		wm.WarpPointerRel(dx, dy)
 		// TODO apply snapping
 	}
@@ -1756,6 +1756,11 @@ func winlayerfunc(layer Layer) func(*WM) {
 			win.SetLayer(layer)
 		}
 	}
+}
+
+type Layout struct {
+	Geometry
+	State MaximizedState
 }
 
 var commands = map[string]func(wm *WM){
