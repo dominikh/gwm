@@ -40,20 +40,6 @@ import (
 	"honnef.co/go/gwm/menu"
 )
 
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-func max(x, y int) int {
-	if x > y {
-		return x
-	}
-	return y
-}
-
 func abs(x int) int {
 	if x >= 0 {
 		return x
@@ -557,16 +543,6 @@ func (win *Window) Resize(w, h int) {
 	win.resize()
 }
 
-func (win *Window) MoveAndResize(x, y, width, height int) {
-	// FIXME respect min/max size and increments
-	// TODO document that this function will reset the maximized state
-	win.Layout.X = x
-	win.Layout.Y = y
-	win.Layout.Width = width
-	win.Layout.Height = height
-	win.moveAndResize()
-}
-
 func (win *Window) Freeze() {
 	win.frozen = true
 }
@@ -705,11 +681,6 @@ func (win *Window) moveAndResize() {
 // move moves the window based on its current Geom.
 func (win *Window) moveNoReset() {
 	win.Window.Move(win.Layout.X, win.Layout.Y)
-}
-
-// resize resizes the window based on its current Geom.
-func (win *Window) resizeNoReset() {
-	win.Window.Resize(win.Layout.Width, win.Layout.Height)
 }
 
 // moveAndResize moves and resizes the window based on its current
