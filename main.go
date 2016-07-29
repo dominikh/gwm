@@ -1342,7 +1342,9 @@ func (wm *WM) debug() {
 
 func (wm *WM) Restart() {
 	log.Println("Restarting gwm")
-	syscall.Exec(os.Args[0], os.Args, os.Environ())
+	if err := syscall.Exec(os.Args[0], os.Args, os.Environ()); err != nil {
+		log.Println("exec failed:", err)
+	}
 }
 
 func (wm *WM) WarpPointer(d Point) {
