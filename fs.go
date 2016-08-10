@@ -16,7 +16,6 @@ import (
 
 const (
 	qidRoot = iota + 1
-	qidWins
 	qidLast
 )
 
@@ -43,35 +42,27 @@ type Writer interface {
 	Write([]byte) error
 }
 
-type FSWindows struct {
+type FSDirectory struct {
 	parent Directory
-	wm     *WM
+	name   string
+	files  []File
 }
 
-var _ File = FSWindows{}
-var _ Directory = FSWindows{}
-
-func (wins FSWindows) Parent() Directory {
-	return wins.parent
+func (dir FSDirectory) Parent() Directory {
+	return dir.parent
 }
 
-func (wins FSWindows) Name() string {
-	return "wins"
+func (dir FSDirectory) Name() string {
+	return dir.name
 }
 
-func (FSWindows) Qid() uint64 {
-	return qidWins
+func (FSDirectory) Qid() uint64 {
+	// XXX
+	return 999
 }
 
-func (wins FSWindows) Files() []File {
-	var out []File
-	for _, win := range wins.wm.Windows {
-		out = append(out, FSWindow{parent: wins, win: win})
-	}
-	if wins.wm.CurWindow != nil {
-		out = append(out, FSWindow{parent: wins, win: wins.wm.CurWindow, name: "sel"})
-	}
-	return out
+func (dir FSDirectory) Files() []File {
+	return dir.files
 }
 
 type FSWindow struct {
@@ -183,7 +174,102 @@ func (r Root) Parent() Directory {
 }
 
 func (r Root) Files() []File {
-	return []File{FSWindows{wm: r.wm, parent: r}}
+	wins := FSDirectory{
+		parent: r,
+		name:   "wins",
+	}
+
+	for _, win := range r.wm.Windows {
+		wins.files = append(wins.files, FSWindow{
+			parent: wins,
+			win:    win,
+		})
+	}
+	if r.wm.CurWindow != nil {
+		wins.files = append(wins.files, FSWindow{
+			parent: wins,
+			win:    r.wm.CurWindow,
+			name:   "sel",
+		})
+	}
+	nameGroups := FSWindowNameGroup{
+		parent: wins,
+		name:   "by-name",
+		wm:     r.wm,
+	}
+	wins.files = append(wins.files, nameGroups)
+	return []File{wins}
+}
+
+type FSWindowNameGroup struct {
+	parent Directory
+	name   string
+	wm     *WM
+}
+
+func (g FSWindowNameGroup) Qid() uint64 {
+	// XXX
+	return 321
+}
+
+func (g FSWindowNameGroup) Parent() Directory {
+	return g.parent
+}
+
+func (g FSWindowNameGroup) Name() string {
+	return g.name
+}
+
+func (g FSWindowNameGroup) Files() []File {
+	m := map[string][]*Window{}
+	for _, win := range g.wm.Windows {
+		name := win.Name()
+		if name == "" {
+			continue
+		}
+		m[name] = append(m[name], win)
+	}
+
+	var out []File
+	for name, wins := range m {
+		dir := FSDirectory{
+			parent: g,
+			name:   name,
+		}
+		for _, win := range wins {
+			dir.files = append(dir.files, FSWindow{parent: dir, win: win})
+		}
+		out = append(out, dir)
+	}
+
+	return out
+}
+
+type FSUnion struct {
+	dirs   []Directory
+	parent Directory
+	name   string
+}
+
+func (l FSUnion) Parent() Directory {
+	return l.parent
+}
+
+func (l FSUnion) Name() string {
+	return l.name
+}
+
+func (l FSUnion) Qid() uint64 {
+	// XXX
+	return 123
+}
+
+func (l FSUnion) Files() []File {
+	var out []File
+	for _, d := range l.dirs {
+		out = append(out, d.Files()...)
+	}
+	return out
 }
 
 func (Root) Qid() uint64 {
