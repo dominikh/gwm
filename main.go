@@ -1569,7 +1569,7 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 	wm.font, err = xproto.NewFontId(xu.Conn())
 	must(err)
 
-	name := "-Misc-Fixed-Bold-R-Normal--18-120-100-100-C-90-ISO10646-1"
+	name := "-*-terminus-*-r-*-*-20-*-*-*-*-*-iso10646-*"
 	err = xproto.OpenFontChecked(xu.Conn(), wm.font, uint16(len(name)), name).Check()
 	if err != nil {
 		log.Fatalln("couldn't load font:", err)
