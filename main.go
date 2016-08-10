@@ -240,11 +240,11 @@ type Window struct {
 	State             State
 	Layer             Layer
 	Layout            Layout
+	LayoutStack       []Layout
 	Mapped            bool
 	BorderWidth       int
 	wm                *WM
 	curDrag           *drag
-	unmaximizedGeom   Geometry
 	unfullscreenGeom  Geometry
 	unfullscreenLayer Layer
 	frozen            bool
@@ -322,6 +322,7 @@ func (win *Window) Lower() {
 }
 
 func (win *Window) MoveBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
+	win.PushLayout()
 	win.Raise()
 	win.curDrag = &drag{
 		pointer: win.wm.PointerPos(),
@@ -358,6 +359,8 @@ func (win *Window) MoveEnd(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) 
 }
 
 func (win *Window) ResizeBegin(xu *xgbutil.XUtil, rootX, rootY, eventX, eventY int) (bool, xproto.Cursor) {
+	win.PushLayout()
+
 	if eventX < 0 {
 		eventX = 0
 	}
@@ -555,6 +558,33 @@ func (win *Window) ToggleFreeze() {
 	win.frozen = !win.frozen
 }
 
+func (win *Window) PushLayout() {
+	if len(win.LayoutStack) > 0 && win.LayoutStack[len(win.LayoutStack)-1] == win.Layout {
+		return
+	}
+	win.LayoutStack = append(win.LayoutStack, win.Layout)
+	if len(win.LayoutStack) > 10 {
+		copy(win.LayoutStack, win.LayoutStack[1:])
+		win.LayoutStack = win.LayoutStack[:len(win.LayoutStack)-1]
+	}
+}
+
+func (win *Window) PopLayout() {
+	if len(win.LayoutStack) == 0 {
+		return
+	}
+	l := win.LayoutStack[len(win.LayoutStack)-1]
+	win.LayoutStack = win.LayoutStack[:len(win.LayoutStack)-1]
+	win.ApplyLayout(l)
+	win.CenterPointer()
+}
+
+func (win *Window) ApplyLayout(l Layout) {
+	win.Layout = l
+	win.moveAndResizeNoReset()
+	win.updateWmState()
+}
+
 func (win *Window) Fullscreen() {
 	if win.Layout.State == Fullscreen {
 		return
@@ -601,10 +631,7 @@ func (win *Window) ToggleFullscreen() {
 func (win *Window) Maximize(state MaximizedState) {
 	// TODO what about min/max size and increments?
 
-	// Only store the geometry if we're not maximized at all yet
-	if win.Layout.State == 0 {
-		win.unmaximizedGeom = win.Layout.Geometry
-	}
+	win.PushLayout()
 
 	sc := win.Screen().subtractGap(win.wm.Config.Gap)
 	if (state & MaximizedH) > 0 {
@@ -618,31 +645,6 @@ func (win *Window) Maximize(state MaximizedState) {
 	win.moveAndResizeNoReset()
 	win.Layout.State |= state
 	win.updateWmState()
-}
-
-func (win *Window) Unmaximize(state MaximizedState) {
-	if (state & MaximizedH) > 0 {
-		win.Layout.X = win.unmaximizedGeom.X
-		win.Layout.Width = win.unmaximizedGeom.Width
-	}
-	if (state & MaximizedV) > 0 {
-		win.Layout.Y = win.unmaximizedGeom.Y
-		win.Layout.Height = win.unmaximizedGeom.Height
-	}
-	win.moveAndResize()
-	if !win.ContainsPointer() {
-		win.CenterPointer()
-	}
-	win.Layout.State &= ^state
-	win.updateWmState()
-}
-
-func (win *Window) ToggleMaximize(state MaximizedState) {
-	if state > win.Layout.State || win.Layout.State&state == 0 {
-		win.Maximize(state)
-	} else {
-		win.Unmaximize(state)
-	}
 }
 
 func (win *Window) ContainsPointer() bool {
@@ -965,9 +967,7 @@ func (win *Window) removeState(prop string) {
 	case "_NET_WM_STATE_FULLSCREEN":
 		win.Unfullscreen()
 	case "_NET_WM_STATE_MAXIMIZED_HORZ":
-		win.Unmaximize(MaximizedH)
 	case "_NET_WM_STATE_MAXIMIZED_VERT":
-		win.Unmaximize(MaximizedV)
 	case "_NET_WM_STATE_ABOVE", "_NET_WM_STATE_BELOW":
 		win.SetLayer(LayerNormal)
 	default:
@@ -997,9 +997,7 @@ func (win *Window) toggleState(prop string) {
 	case "_NET_WM_STATE_FULLSCREEN":
 		win.ToggleFullscreen()
 	case "_NET_WM_STATE_MAXIMIZED_HORZ":
-		win.ToggleMaximize(MaximizedH)
 	case "_NET_WM_STATE_MAXIMIZED_VERT":
-		win.ToggleMaximize(MaximizedV)
 	case "_NET_WM_STATE_ABOVE":
 		if win.Layer == LayerAbove {
 			win.SetLayer(LayerNormal)
@@ -1572,7 +1570,6 @@ func (wm *WM) Color(name string) int {
 
 func (wm *WM) Init(xu *xgbutil.XUtil) {
 	var err error
-
 	wm.X = xu
 	// TODO make replacing the WM optional
 	if err := wm.acquireOwnership(true); err != nil {
@@ -1725,7 +1722,7 @@ func winmaximizefunc(state MaximizedState) func(*WM) {
 		if wm.CurWindow == nil {
 			return
 		}
-		wm.CurWindow.ToggleMaximize(state)
+		wm.CurWindow.Maximize(state)
 	}
 }
 
@@ -1776,6 +1773,7 @@ var commands = map[string]func(wm *WM){
 	"above":        winlayerfunc(LayerAbove),
 	"below":        winlayerfunc(LayerBelow),
 	"delete":       winfunc((*Window).Delete),
+	"poplayout":    winfunc((*Window).PopLayout),
 	"cycle":        (*WM).CycleScreens,
 
 	"debug":   (*WM).debug,
