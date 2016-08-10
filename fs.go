@@ -98,7 +98,9 @@ func (attr FSWindowAttr) Read() []byte {
 	if attr.readFn == nil {
 		return nil
 	}
-	return attr.readFn()
+	b := attr.readFn()
+	b = append(b, '\n')
+	return b
 }
 
 func (attr FSWindowAttr) Write(b []byte) error {
@@ -128,6 +130,9 @@ func (win FSWindow) Files() []File {
 			func(b []byte) error {
 				if len(b) < 3 {
 					return p9p.ErrNowrite
+				}
+				if b[len(b)-1] == '\n' {
+					b = b[:len(b)-1]
 				}
 				parts := bytes.Split(b, []byte{' '})
 				if len(parts) != 2 {
