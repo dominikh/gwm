@@ -1106,6 +1106,27 @@ func (win *Window) updateWmState() {
 	ewmh.WmStateSet(win.wm.X, win.Id, atoms)
 }
 
+func (wm *WM) CycleScreens() {
+	// TODO currently, this only supports screens that are placed next
+	// to each other, not above/below. They also need to have the same
+	// height.
+	screens := wm.Screens()
+	if len(screens) != 2 {
+		return
+	}
+
+	width := 0
+	for _, sc := range screens {
+		width += sc.Width
+	}
+
+	for _, win := range wm.Windows {
+		win.Layout.X = (win.Layout.X + win.Screen().Width) % width
+		// FIXME this clears the maximized state
+		win.move()
+	}
+}
+
 type WM struct {
 	X         *xgbutil.XUtil
 	Cursors   map[string]xproto.Cursor
@@ -1755,6 +1776,7 @@ var commands = map[string]func(wm *WM){
 	"above":        winlayerfunc(LayerAbove),
 	"below":        winlayerfunc(LayerBelow),
 	"delete":       winfunc((*Window).Delete),
+	"cycle":        (*WM).CycleScreens,
 
 	"debug":   (*WM).debug,
 	"restart": (*WM).Restart,
