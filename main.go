@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,8 @@ import (
 	"github.com/BurntSushi/xgbutil/xinerama"
 	"github.com/BurntSushi/xgbutil/xprop"
 	"github.com/BurntSushi/xgbutil/xwindow"
+	p9p "github.com/docker/go-p9p"
+	"golang.org/x/net/context"
 
 	"honnef.co/go/gwm/config"
 	"honnef.co/go/gwm/draw"
@@ -273,6 +276,12 @@ func (win *Window) Name() string {
 	}
 
 	return name
+}
+
+func (win *Window) SetName(name string) {
+	if err := ewmh.WmNameSet(win.X(), win.Window.Id, name); err != nil {
+		icccm.WmNameSet(win.X(), win.Window.Id, name)
+	}
 }
 
 func (win *Window) SetBorderColor(color int) {
@@ -1688,6 +1697,29 @@ func main() {
 	}
 	xu, err := xgbutil.NewConn()
 	must(err)
+
+	laddr, err := net.ResolveUnixAddr("unix", "/tmp/gwm-0")
+	if err != nil {
+		panic(err)
+	}
+
+	go func() {
+		srv, err := net.ListenUnix("unix", laddr)
+		if err != nil {
+			panic(err)
+		}
+		for {
+			conn, err := srv.Accept()
+			if err != nil {
+				panic(err)
+			}
+
+			if err := p9p.ServeConn(context.Background(), conn, p9p.Dispatch(newSession(wm))); err != nil {
+				log.Println(err)
+			}
+		}
+	}()
+
 	wm.Init(xu)
 }
 
