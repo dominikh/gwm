@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/xgbutil/xprop"
 	p9p "github.com/docker/go-p9p"
 	"golang.org/x/net/context"
 )
@@ -145,6 +146,19 @@ func (win FSWindow) Files() []File {
 			win.win,
 			"id",
 			func() []byte { return []byte(fmt.Sprintf("%d", win.win.Id)) },
+			nil,
+		},
+		FSWindowAttr{
+			win.win,
+			"pid",
+			func() []byte {
+				raw, err := xprop.GetProperty(win.win.wm.X, win.win.Id, "_NET_WM_PID")
+				n, err := xprop.PropValNum(raw, err)
+				if err != nil {
+					return nil
+				}
+				return []byte(fmt.Sprintf("%d", n))
+			},
 			nil,
 		},
 	}
