@@ -211,7 +211,7 @@ func (r Root) Files() []File {
 			name:   "sel",
 		})
 	}
-	nameGroups := FSWindowNameGroup{
+	nameGroups := &FSWindowNameGroup{
 		parent: wins,
 		name:   "by-name",
 		wm:     r.wm,
@@ -224,22 +224,28 @@ type FSWindowNameGroup struct {
 	parent Directory
 	name   string
 	wm     *WM
+
+	files []File
 }
 
-func (g FSWindowNameGroup) Qid() uint64 {
+func (g *FSWindowNameGroup) Qid() uint64 {
 	// XXX
 	return 321
 }
 
-func (g FSWindowNameGroup) Parent() Directory {
+func (g *FSWindowNameGroup) Parent() Directory {
 	return g.parent
 }
 
-func (g FSWindowNameGroup) Name() string {
+func (g *FSWindowNameGroup) Name() string {
 	return g.name
 }
 
-func (g FSWindowNameGroup) Files() []File {
+func (g *FSWindowNameGroup) Files() []File {
+	if g.files != nil {
+		return g.files
+	}
+	log.Println("-> Generating by-name files")
 	m := map[string][]*Window{}
 	for _, win := range g.wm.Windows {
 		name := win.Name()
@@ -262,6 +268,7 @@ func (g FSWindowNameGroup) Files() []File {
 		out = append(out, dir)
 	}
 
+	g.files = out
 	return out
 }
 
