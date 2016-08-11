@@ -320,7 +320,10 @@ outer:
 	for _, name := range names {
 		dir, ok := node.(Directory)
 		if !ok {
-			return nil, p9p.ErrWalknodir
+			if len(qids) == 0 {
+				return nil, p9p.ErrWalknodir
+			}
+			return qids, nil
 		}
 		if name == ".." {
 			node = dir.Parent()
@@ -337,7 +340,10 @@ outer:
 				continue outer
 			}
 		}
-		return nil, p9p.ErrNotfound
+		if len(qids) == 0 {
+			return nil, p9p.ErrNotfound
+		}
+		return qids, nil
 	}
 	s.fids[newfid] = node
 	return qids, nil
