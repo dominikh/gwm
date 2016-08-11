@@ -264,33 +264,6 @@ func (g FSWindowNameGroup) Files() []File {
 	return out
 }
 
-type FSUnion struct {
-	dirs   []Directory
-	parent Directory
-	name   string
-}
-
-func (l FSUnion) Parent() Directory {
-	return l.parent
-}
-
-func (l FSUnion) Name() string {
-	return l.name
-}
-
-func (l FSUnion) Qid() uint64 {
-	// XXX
-	return 123
-}
-
-func (l FSUnion) Files() []File {
-	var out []File
-	for _, d := range l.dirs {
-		out = append(out, d.Files()...)
-	}
-	return out
-}
-
 func (Root) Qid() uint64 {
 	return qidRoot
 }
