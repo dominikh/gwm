@@ -251,6 +251,7 @@ func (g FSWindowNameGroup) Files() []File {
 
 	var out []File
 	for name, wins := range m {
+		name = strings.Replace(name, "/", "_", -1)
 		dir := FSDirectory{
 			parent: g,
 			name:   name,
