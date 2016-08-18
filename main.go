@@ -814,13 +814,34 @@ func (win *Window) FillSelect() {
 }
 
 func (win *Window) Fill() {
-	left, top, right, bottom := win.collisions()
-
 	win.PushLayout()
-	win.Layout.X = left
-	win.Layout.Y = top
-	win.Layout.Width = right - left
-	win.Layout.Height = bottom - top
+
+	l := win.Layout
+
+	left1, _, right1, _ := win.collisions()
+	win.Layout.X = left1
+	win.Layout.Width = right1 - left1
+	_, top1, _, bottom1 := win.collisions()
+	area1 := (right1 - left1) * (bottom1 - top1)
+
+	win.Layout = l
+	_, top2, _, bottom2 := win.collisions()
+	win.Layout.Y = top2
+	win.Layout.Height = bottom2 - top2
+	left2, _, right2, _ := win.collisions()
+	area2 := (right2 - left2) * (bottom2 - top2)
+
+	if area1 > area2 {
+		win.Layout.X = left1
+		win.Layout.Y = top1
+		win.Layout.Width = right1 - left1
+		win.Layout.Height = bottom1 - top1
+	} else {
+		win.Layout.X = left2
+		win.Layout.Y = top2
+		win.Layout.Width = right2 - left2
+		win.Layout.Height = bottom2 - top2
+	}
 	win.moveAndResizeNoReset()
 }
 
