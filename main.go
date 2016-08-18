@@ -638,10 +638,11 @@ func (win *Window) ToggleFullscreen() {
 }
 
 func (win *Window) Corners() (Point, Point, Point, Point) {
-	p1 := Point{win.Layout.X, win.Layout.Y}
-	p2 := Point{win.Layout.X + win.Layout.Width, win.Layout.Y}
-	p3 := Point{win.Layout.X + win.Layout.Width, win.Layout.Y + win.Layout.Height}
-	p4 := Point{win.Layout.X, win.Layout.Y + win.Layout.Height}
+	bw := win.BorderWidth
+	p1 := Point{win.Layout.X - bw, win.Layout.Y - bw}
+	p2 := Point{win.Layout.X + win.Layout.Width + bw, win.Layout.Y - bw}
+	p3 := Point{win.Layout.X + win.Layout.Width + bw, win.Layout.Y + win.Layout.Height + bw}
+	p4 := Point{win.Layout.X - bw, win.Layout.Y + win.Layout.Height + bw}
 
 	return p1, p2, p3, p4
 }
@@ -660,10 +661,11 @@ func (win *Window) collisions() (left, top, right, bottom int) {
 	screen = screen.subtractGap(win.wm.Config.Gap)
 
 	p1, p2, p3, _ := win.Corners()
-	left = screen.X
-	top = screen.Y
-	right = screen.X + screen.Width
-	bottom = screen.Y + screen.Height
+	bw := win.BorderWidth
+	left = screen.X + 2*bw
+	top = screen.Y + 2*bw
+	right = screen.X + screen.Width - 2*bw
+	bottom = screen.Y + screen.Height - 2*bw
 	for _, owin := range win.wm.GetWindows(icccm.StateNormal) {
 		if win.Id == owin.Id {
 			continue
@@ -681,10 +683,10 @@ func (win *Window) collisions() (left, top, right, bottom int) {
 			continue
 		}
 		if op2.X <= p1.X && op2.X > left {
-			left = op2.X
+			left = op2.X + bw
 		}
 		if op1.X >= p2.X && op1.X < right {
-			right = op1.X
+			right = op1.X - bw
 		}
 	}
 	for _, owin := range win.wm.GetWindows(icccm.StateNormal) {
@@ -704,11 +706,11 @@ func (win *Window) collisions() (left, top, right, bottom int) {
 			continue
 		}
 		if op3.Y <= p1.Y && op3.Y > top {
-			top = op3.Y
+			top = op3.Y + bw
 		}
 
 		if op1.Y >= p3.Y && op1.Y < bottom {
-			bottom = op1.Y
+			bottom = op1.Y - bw
 		}
 	}
 	return left, top, right, bottom
