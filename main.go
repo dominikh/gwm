@@ -660,63 +660,6 @@ func (win *Window) Overlaps(other *Window) bool {
 		(p2.X <= op1.X || p1.X >= op2.X)
 }
 
-// TODO rename function or change its signature or do something about
-// it. its behaviour is too specific for its name.
-func (wm *WM) CollisionsAroundPoint(pt Point, win *Window) (left, top, right, bottom int) {
-	screen := screenForPoint(wm.Screens(), pt)
-	bw := win.BorderWidth
-	left = screen.X + 2*bw
-	top = screen.Y + 2*bw
-	right = screen.X + screen.Width - 2*bw
-	bottom = screen.Y + screen.Height - 2*bw
-	for _, owin := range wm.GetWindows(icccm.StateNormal) {
-		if win.Id == owin.Id {
-			continue
-		}
-		if owin.Layout.Geometry.Contains(pt) {
-			continue
-		}
-
-		op1, op2, op3, _ := owin.Corners()
-		if op1.Y < pt.Y && op3.Y < pt.Y {
-			continue
-		}
-		if op1.Y > pt.Y && op3.Y > pt.Y {
-			continue
-		}
-		if op2.X <= pt.X && op2.X > left {
-			left = op2.X + bw
-		}
-		if op1.X >= pt.X && op1.X < right {
-			right = op1.X - bw
-		}
-	}
-	for _, owin := range win.wm.GetWindows(icccm.StateNormal) {
-		if win.Id == owin.Id {
-			continue
-		}
-		if win.Overlaps(owin) {
-			continue
-		}
-
-		op1, op2, op3, _ := owin.Corners()
-		if op1.X < pt.X && op2.X < pt.X {
-			continue
-		}
-		if op1.X > pt.X && op2.X > pt.X {
-			continue
-		}
-		if op3.Y <= pt.Y && op3.Y > top {
-			top = op3.Y + bw
-		}
-
-		if op1.Y >= pt.Y && op1.Y < bottom {
-			bottom = op1.Y - bw
-		}
-	}
-	return left, top, right, bottom
-}
-
 func (win *Window) collisions() (left, top, right, bottom int) {
 	// FIXME what happens with windows that span screens?
 	screen := win.Screen()
@@ -791,14 +734,12 @@ func (win *Window) FillSelect() {
 	}
 
 	cb := func(ev xevent.ButtonPressEvent) {
-		left, top, right, bottom := win.wm.CollisionsAroundPoint(Point{int(ev.RootX), int(ev.RootY)}, win)
-
 		win.PushLayout()
-		win.Layout.X = left
-		win.Layout.Y = top
-		win.Layout.Width = right - left
-		win.Layout.Height = bottom - top
-		win.moveAndResizeNoReset()
+		win.Layout.X = int(ev.RootX)
+		win.Layout.Y = int(ev.RootY)
+		win.Layout.Width = 1
+		win.Layout.Height = 1
+		win.fill()
 	}
 
 	fn := mousebind.ButtonPressFun(func(xu *xgbutil.XUtil, event xevent.ButtonPressEvent) {
@@ -815,7 +756,10 @@ func (win *Window) FillSelect() {
 
 func (win *Window) Fill() {
 	win.PushLayout()
+	win.fill()
+}
 
+func (win *Window) fill() {
 	l := win.Layout
 
 	left1, _, right1, _ := win.collisions()
