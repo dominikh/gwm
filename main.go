@@ -156,9 +156,14 @@ func executables() []menu.Entry {
 
 	sort.StringSlice(executables).Sort()
 
-	entries := make([]menu.Entry, len(executables))
-	for i, e := range executables {
-		entries[i] = menu.Entry{Display: e, Payload: e}
+	var last string
+	entries := make([]menu.Entry, 0, len(executables))
+	for _, e := range executables {
+		if e == last {
+			continue
+		}
+		last = e
+		entries = append(entries, menu.Entry{Display: e, Payload: e})
 	}
 	return entries
 }
