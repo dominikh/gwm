@@ -637,6 +637,170 @@ func (win *Window) ToggleFullscreen() {
 	}
 }
 
+func (win *Window) Corners() (Point, Point, Point, Point) {
+	p1 := Point{win.Layout.X, win.Layout.Y}
+	p2 := Point{win.Layout.X + win.Layout.Width, win.Layout.Y}
+	p3 := Point{win.Layout.X + win.Layout.Width, win.Layout.Y + win.Layout.Height}
+	p4 := Point{win.Layout.X, win.Layout.Y + win.Layout.Height}
+
+	return p1, p2, p3, p4
+}
+
+func (win *Window) Overlaps(other *Window) bool {
+	p1, p2, p3, _ := win.Corners()
+	op1, op2, op3, _ := other.Corners()
+
+	return (p3.Y <= op1.Y || p1.Y >= op3.Y) &&
+		(p2.X <= op1.X || p1.X >= op2.X)
+}
+
+func (win *Window) collisions() (left, top, right, bottom int) {
+	// FIXME what happens with windows that span screens?
+	screen := win.Screen()
+	screen = screen.subtractGap(win.wm.Config.Gap)
+
+	p1, p2, p3, _ := win.Corners()
+	left = screen.X
+	top = screen.Y
+	right = screen.X + screen.Width
+	bottom = screen.Y + screen.Height
+	for _, owin := range win.wm.GetWindows(icccm.StateNormal) {
+		if win.Id == owin.Id {
+			continue
+		}
+		if win.Overlaps(owin) {
+			continue
+		}
+
+		op1, op2, op3, _ := owin.Corners()
+
+		if op1.Y < p1.Y && op1.Y < p3.Y && op3.Y < p1.Y && op3.Y < p3.Y {
+			continue
+		}
+		if op1.Y > p1.Y && op1.Y > p3.Y && op3.Y > p1.Y && op3.Y > p3.Y {
+			continue
+		}
+		if op2.X <= p1.X && op2.X > left {
+			left = op2.X
+		}
+		if op1.X >= p2.X && op1.X < right {
+			right = op1.X
+		}
+	}
+	for _, owin := range win.wm.GetWindows(icccm.StateNormal) {
+		if win.Id == owin.Id {
+			continue
+		}
+		if win.Overlaps(owin) {
+			continue
+		}
+
+		op1, op2, op3, _ := owin.Corners()
+
+		if op1.X < p1.X && op1.X < p2.X && op2.X < p1.X && op2.X < p2.X {
+			continue
+		}
+		if op1.X > p1.X && op1.X > p2.X && op2.X > p1.X && op2.X > p2.X {
+			continue
+		}
+		if op3.Y <= p1.Y && op3.Y > top {
+			top = op3.Y
+		}
+
+		if op1.Y >= p3.Y && op1.Y < bottom {
+			bottom = op1.Y
+		}
+	}
+	return left, top, right, bottom
+}
+
+func (win *Window) Fill() {
+	left, top, right, bottom := win.collisions()
+
+	win.PushLayout()
+	win.Layout.X = left
+	win.Layout.Y = top
+	win.Layout.Width = right - left
+	win.Layout.Height = bottom - top
+	win.moveAndResizeNoReset()
+}
+
+func (win *Window) FillUp() {
+	_, top, _, _ := win.collisions()
+
+	win.PushLayout()
+	oy := win.Layout.Y
+	win.Layout.Y = top
+	win.Layout.Height += oy - win.Layout.Y
+	win.moveAndResizeNoReset()
+}
+
+func (win *Window) FillDown() {
+	_, _, _, bottom := win.collisions()
+
+	win.PushLayout()
+	win.Layout.Height = bottom - win.Layout.Y
+	win.moveAndResizeNoReset()
+}
+
+func (win *Window) FillLeft() {
+	left, _, _, _ := win.collisions()
+
+	win.PushLayout()
+	ox := win.Layout.X
+	win.Layout.X = left
+	win.Layout.Width += ox - win.Layout.X
+	win.moveAndResizeNoReset()
+}
+
+func (win *Window) FillRight() {
+	_, _, right, _ := win.collisions()
+
+	win.PushLayout()
+	win.Layout.Width = right - win.Layout.X
+	win.moveAndResizeNoReset()
+}
+
+func (win *Window) PushUp() {
+	_, top, _, _ := win.collisions()
+
+	win.PushLayout()
+	oldY := win.Layout.Y
+	win.Layout.Y = top
+	win.wm.WarpPointerRel(0, win.Layout.Y-oldY)
+	win.moveNoReset()
+}
+
+func (win *Window) PushDown() {
+	_, _, _, bottom := win.collisions()
+
+	win.PushLayout()
+	oldY := win.Layout.Y
+	win.Layout.Y = bottom - win.Layout.Height
+	win.wm.WarpPointerRel(0, win.Layout.Y-oldY)
+	win.moveNoReset()
+}
+
+func (win *Window) PushLeft() {
+	left, _, _, _ := win.collisions()
+
+	win.PushLayout()
+	oldX := win.Layout.X
+	win.Layout.X = left
+	win.wm.WarpPointerRel(win.Layout.X-oldX, 0)
+	win.moveNoReset()
+}
+
+func (win *Window) PushRight() {
+	_, _, right, _ := win.collisions()
+
+	win.PushLayout()
+	oldX := win.Layout.X
+	win.Layout.X = right - win.Layout.Width
+	win.wm.WarpPointerRel(win.Layout.X-oldX, 0)
+	win.moveNoReset()
+}
+
 func (win *Window) Maximize(state MaximizedState) {
 	// TODO what about min/max size and increments?
 
@@ -1789,6 +1953,15 @@ type Layout struct {
 var commands = map[string]func(wm *WM){
 	"lower":        winfunc((*Window).Lower),
 	"raise":        winfunc((*Window).Raise),
+	"fill":         winfunc((*Window).Fill),
+	"fillup":       winfunc((*Window).FillUp),
+	"filldown":     winfunc((*Window).FillDown),
+	"fillleft":     winfunc((*Window).FillLeft),
+	"fillright":    winfunc((*Window).FillRight),
+	"pushup":       winfunc((*Window).PushUp),
+	"pushdown":     winfunc((*Window).PushDown),
+	"pushleft":     winfunc((*Window).PushLeft),
+	"pushright":    winfunc((*Window).PushRight),
 	"moveup":       winmovefunc(0, -1),
 	"bigmoveup":    winmovefunc(0, -10),
 	"movedown":     winmovefunc(0, 1),
