@@ -65,7 +65,6 @@ type Menu struct {
 
 // TODO document that input slice mustn't be modified
 type FilterFunc func(entries []Entry, prompt string) []Entry
-type ExecFunc func(Entry)
 
 func FilterPrefix(entries []Entry, prompt string) []Entry {
 	if prompt == "" {
