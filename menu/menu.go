@@ -242,7 +242,7 @@ func (m *Menu) filter() {
 	}
 }
 
-func (m *Menu) Show() *xwindow.Window {
+func (m *Menu) Show() {
 	m.win.Map()
 
 	for i := 0; i < 500; i++ {
@@ -260,7 +260,6 @@ func (m *Menu) Show() *xwindow.Window {
 	}
 
 	m.draw()
-	return m.win
 }
 
 func (m *Menu) Wait() (Entry, bool) {
