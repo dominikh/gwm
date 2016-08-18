@@ -661,7 +661,11 @@ func (win *Window) Overlaps(other *Window) bool {
 		(p2.X <= op1.X || p1.X >= op2.X)
 }
 
-func (win *Window) collisions() (left, top, right, bottom int) {
+func (wm *WM) VisibleWindows() []*Window {
+	return wm.GetWindows(icccm.StateNormal)
+}
+
+func (win *Window) collisions(with []*Window) (left, top, right, bottom int) {
 	// FIXME what happens with windows that span screens?
 	screen := win.Screen()
 	screen = screen.subtractGap(win.wm.Config.Gap)
@@ -672,7 +676,7 @@ func (win *Window) collisions() (left, top, right, bottom int) {
 	top = screen.Y + 2*bw
 	right = screen.X + screen.Width - 2*bw
 	bottom = screen.Y + screen.Height - 2*bw
-	for _, owin := range win.wm.GetWindows(icccm.StateNormal) {
+	for _, owin := range with {
 		if win.Id == owin.Id {
 			continue
 		}
@@ -694,7 +698,7 @@ func (win *Window) collisions() (left, top, right, bottom int) {
 			right = op1.X - bw
 		}
 	}
-	for _, owin := range win.wm.GetWindows(icccm.StateNormal) {
+	for _, owin := range with {
 		if win.Id == owin.Id {
 			continue
 		}
@@ -762,20 +766,21 @@ func (win *Window) Fill() {
 
 func (win *Window) fill() {
 	l := win.Layout
+	with := win.wm.VisibleWindows()
 
-	left1, _, right1, _ := win.collisions()
+	left1, _, right1, _ := win.collisions(with)
 	win.Layout.X = left1
 	win.Layout.Width = right1 - left1
-	_, top1, _, bottom1 := win.collisions()
+	_, top1, _, bottom1 := win.collisions(with)
 	w := float64(right1 - left1)
 	h := float64(bottom1 - top1)
 	square1 := math.Min(w, h) / math.Max(w, h)
 
 	win.Layout = l
-	_, top2, _, bottom2 := win.collisions()
+	_, top2, _, bottom2 := win.collisions(with)
 	win.Layout.Y = top2
 	win.Layout.Height = bottom2 - top2
-	left2, _, right2, _ := win.collisions()
+	left2, _, right2, _ := win.collisions(with)
 	w = float64(right2 - left2)
 	h = float64(bottom2 - top2)
 	square2 := math.Min(w, h) / math.Max(w, h)
@@ -795,7 +800,7 @@ func (win *Window) fill() {
 }
 
 func (win *Window) FillUp() {
-	_, top, _, _ := win.collisions()
+	_, top, _, _ := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	oy := win.Layout.Y
@@ -805,7 +810,7 @@ func (win *Window) FillUp() {
 }
 
 func (win *Window) FillDown() {
-	_, _, _, bottom := win.collisions()
+	_, _, _, bottom := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	win.Layout.Height = bottom - win.Layout.Y
@@ -813,7 +818,7 @@ func (win *Window) FillDown() {
 }
 
 func (win *Window) FillLeft() {
-	left, _, _, _ := win.collisions()
+	left, _, _, _ := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	ox := win.Layout.X
@@ -823,7 +828,7 @@ func (win *Window) FillLeft() {
 }
 
 func (win *Window) FillRight() {
-	_, _, right, _ := win.collisions()
+	_, _, right, _ := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	win.Layout.Width = right - win.Layout.X
@@ -831,7 +836,7 @@ func (win *Window) FillRight() {
 }
 
 func (win *Window) PushUp() {
-	_, top, _, _ := win.collisions()
+	_, top, _, _ := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	oldY := win.Layout.Y
@@ -841,7 +846,7 @@ func (win *Window) PushUp() {
 }
 
 func (win *Window) PushDown() {
-	_, _, _, bottom := win.collisions()
+	_, _, _, bottom := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	oldY := win.Layout.Y
@@ -851,7 +856,7 @@ func (win *Window) PushDown() {
 }
 
 func (win *Window) PushLeft() {
-	left, _, _, _ := win.collisions()
+	left, _, _, _ := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	oldX := win.Layout.X
@@ -861,7 +866,7 @@ func (win *Window) PushLeft() {
 }
 
 func (win *Window) PushRight() {
-	_, _, right, _ := win.collisions()
+	_, _, right, _ := win.collisions(win.wm.VisibleWindows())
 
 	win.PushLayout()
 	oldX := win.Layout.X
