@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"honnef.co/go/gwm/menu"
+	"honnef.co/go/spew"
+
 	"github.com/BurntSushi/xgbutil/xprop"
 	p9p "github.com/docker/go-p9p"
 	"golang.org/x/net/context"
@@ -17,8 +20,129 @@ import (
 
 const (
 	qidRoot = iota + 1
+	qidMenu
+	qidMenuItems
+	qidMenuSelection
+	qidMenuShow
 	qidLast
 )
+
+var _ Directory = (*FSMenu)(nil)
+
+type FSMenu struct {
+	wm     *WM
+	parent Directory
+
+	items     []string
+	selection string
+}
+
+func (menu *FSMenu) Name() string {
+	return "menu"
+}
+
+func (menu *FSMenu) Qid() uint64 {
+	return qidMenu
+}
+
+func (menu *FSMenu) Parent() Directory {
+	return menu.parent
+}
+
+func (menu *FSMenu) Files() []File {
+	return []File{
+		fsMenuItems{menu},
+		fsMenuSelection{menu},
+		fsMenuShow{menu},
+	}
+}
+
+type fsMenuItems struct {
+	menu *FSMenu
+}
+
+func (items fsMenuItems) Parent() Directory {
+	return items.menu
+}
+
+func (items fsMenuItems) Qid() uint64 {
+	return qidMenuItems
+}
+
+func (items fsMenuItems) Name() string {
+	return "items"
+}
+
+func (items fsMenuItems) Write(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+	ins := bytes.Split(b, []byte{'\n'})
+	for _, input := range ins[:len(ins)-1] {
+		items.menu.items = append(items.menu.items, string(input))
+	}
+	return nil
+}
+
+type fsMenuSelection struct {
+	menu *FSMenu
+}
+
+func (sel fsMenuSelection) Parent() Directory {
+	return sel.menu
+}
+
+func (sel fsMenuSelection) Qid() uint64 {
+	return qidMenuSelection
+}
+
+func (sel fsMenuSelection) Name() string {
+	return "selection"
+}
+
+func (sel fsMenuSelection) Read() []byte {
+	return []byte(sel.menu.selection)
+}
+
+type fsMenuShow struct {
+	menu *FSMenu
+}
+
+func (show fsMenuShow) Parent() Directory {
+	return show.menu
+}
+
+func (show fsMenuShow) Qid() uint64 {
+	return qidMenuShow
+}
+
+func (show fsMenuShow) Name() string {
+	return "show"
+}
+
+func (show fsMenuShow) Write(b []byte) error {
+	var items []menu.Entry
+	for _, item := range show.menu.items {
+		items = append(items, menu.Entry{
+			Display: item,
+			Payload: item,
+		})
+	}
+	spew.Dump(items)
+	m, err := show.menu.wm.newMenu("generic", items, menu.FilterPrefix)
+	if err != nil {
+		return err
+	}
+	m.Show()
+	ret, ok := m.Wait()
+	if !ok {
+		show.menu.selection = ""
+	} else {
+		show.menu.selection = ret.Payload.(string)
+	}
+	show.menu.items = nil
+	return nil
+}
 
 type Directory interface {
 	File
@@ -57,9 +181,13 @@ func (dir FSDirectory) Name() string {
 	return dir.name
 }
 
-func (FSDirectory) Qid() uint64 {
+func (dir FSDirectory) Qid() uint64 {
 	// XXX
-	return 999
+	var n uint64
+	for _, b := range dir.name {
+		n += uint64(b)
+	}
+	return n
 }
 
 func (dir FSDirectory) Files() []File {
@@ -116,7 +244,7 @@ func (win FSWindow) Files() []File {
 			win.win,
 			"name",
 			func() []byte { return []byte(win.win.Name()) },
-			nil,
+			func(b []byte) error { win.win.SetName(string(b)); return nil },
 		},
 		FSWindowAttr{
 			win.win,
@@ -166,6 +294,20 @@ func (win FSWindow) Files() []File {
 			},
 			nil,
 		},
+		FSWindowAttr{
+			win.win,
+			"last_activity",
+			func() []byte {
+				raw, err := xprop.GetProperty(win.win.wm.X, win.win.Id, "_NET_WM_USER_TIME")
+				log.Println(raw, err)
+				n, err := xprop.PropValNum(raw, err)
+				if err != nil {
+					return nil
+				}
+				return []byte(fmt.Sprintf("%d", n))
+			},
+			nil,
+		},
 	}
 }
 
@@ -192,7 +334,11 @@ func (r Root) Parent() Directory {
 	return r
 }
 
+// FIXME: the use of fsmenu is racy
+var fsmenu = &FSMenu{}
+
 func (r Root) Files() []File {
+	log.Println("-> Generating root files")
 	wins := FSDirectory{
 		parent: r,
 		name:   "wins",
@@ -217,7 +363,12 @@ func (r Root) Files() []File {
 		wm:     r.wm,
 	}
 	wins.files = append(wins.files, nameGroups)
-	return []File{wins}
+	fsmenu.wm = r.wm
+	fsmenu.parent = r
+	return []File{
+		wins,
+		fsmenu,
+	}
 }
 
 type FSWindowNameGroup struct {
@@ -339,7 +490,6 @@ outer:
 		}
 		files := dir.Files()
 		for _, file := range files {
-			log.Println(file.Name(), name, file.Name() == name)
 			if file.Name() == name {
 				node = file
 
@@ -373,7 +523,11 @@ func (s session) Read(ctx context.Context, fid p9p.Fid, p []byte, offset int64) 
 		log.Printf("read = %d, %v", n, err)
 	}()
 	log.Printf("read %d at %d into buffer of size %d", fid, offset, len(p))
-	n, err = s.readers[fid].ReadAt(p, offset)
+	r, ok := s.readers[fid]
+	if !ok {
+		return 0, errors.New("reading prohibited")
+	}
+	n, err = r.ReadAt(p, offset)
 	if err == io.EOF {
 		err = nil
 	}
@@ -422,7 +576,7 @@ func (s session) Open(ctx context.Context, fid p9p.Fid, mode p9p.Flag) (p9p.Qid,
 	case Reader:
 		data = file.Read()
 	default:
-		return p9p.Qid{}, 0, errors.New("reading prohibited")
+		return qid(file), 0, nil
 	}
 	s.readers[fid] = bytes.NewReader(data)
 	return qid(file), 0, nil
