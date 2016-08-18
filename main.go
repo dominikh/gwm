@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -766,16 +767,20 @@ func (win *Window) fill() {
 	win.Layout.X = left1
 	win.Layout.Width = right1 - left1
 	_, top1, _, bottom1 := win.collisions()
-	area1 := (right1 - left1) * (bottom1 - top1)
+	w := float64(right1 - left1)
+	h := float64(bottom1 - top1)
+	square1 := math.Min(w, h) / math.Max(w, h)
 
 	win.Layout = l
 	_, top2, _, bottom2 := win.collisions()
 	win.Layout.Y = top2
 	win.Layout.Height = bottom2 - top2
 	left2, _, right2, _ := win.collisions()
-	area2 := (right2 - left2) * (bottom2 - top2)
+	w = float64(right2 - left2)
+	h = float64(bottom2 - top2)
+	square2 := math.Min(w, h) / math.Max(w, h)
 
-	if area1 > area2 {
+	if square1 > square2 {
 		win.Layout.X = left1
 		win.Layout.Y = top1
 		win.Layout.Width = right1 - left1
