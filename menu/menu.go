@@ -257,8 +257,6 @@ func (m *Menu) Show() {
 
 		time.Sleep(time.Millisecond)
 	}
-
-	m.draw()
 }
 
 func (m *Menu) Wait() (Entry, bool) {
