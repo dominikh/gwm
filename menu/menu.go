@@ -38,26 +38,29 @@ func (e Entry) Synthetic() bool {
 }
 
 type Menu struct {
-	xu             *xgbutil.XUtil
-	x              int
-	y              int
-	width          int
-	height         int
-	minY           int
-	maxHeight      int
-	win            *xwindow.Window
+	xu       *xgbutil.XUtil
+	win      *xwindow.Window
+	gcs      draw.GCs
+	filterFn FilterFunc
+	ch       chan Entry
+
+	x         int
+	y         int
+	width     int
+	height    int
+	minY      int
+	maxHeight int
+
+	title       string
+	font        xproto.Font
+	borderWidth int
+	borderColor int
+
 	entries        []Entry
 	displayEntries []Entry
 	active         int
-	font           xproto.Font
-	title          string
 	input          string
 	longestEntry   int
-	borderWidth    int
-	borderColor    int
-	filterFn       FilterFunc
-	ch             chan Entry
-	gcs            draw.GCs
 }
 
 // TODO document that input slice mustn't be modified
@@ -81,17 +84,17 @@ func FilterPrefix(entries []Entry, prompt string) []Entry {
 func New(xu *xgbutil.XUtil, title string, cfg Config) (*Menu, error) {
 	m := &Menu{
 		xu:          xu,
+		gcs:         make(draw.GCs),
+		filterFn:    cfg.FilterFn,
+		ch:          make(chan Entry),
 		title:       title,
+		font:        cfg.Font,
 		y:           cfg.Y,
 		x:           cfg.X,
 		minY:        cfg.MinY,
 		maxHeight:   cfg.MaxHeight,
 		borderWidth: cfg.BorderWidth,
 		borderColor: cfg.BorderColor,
-		font:        cfg.Font,
-		filterFn:    cfg.FilterFn,
-		ch:          make(chan Entry),
-		gcs:         make(draw.GCs),
 	}
 
 	var err error
@@ -132,12 +135,13 @@ func (m *Menu) down(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
 }
 
 func (m *Menu) backspace(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
-	if len(m.input) > 0 {
-		r := []rune(m.input)
-		m.input = string(r[:len(r)-1])
-		m.filter()
-		m.draw()
+	if len(m.input) == 0 {
+		return
 	}
+	r := []rune(m.input)
+	m.input = string(r[:len(r)-1])
+	m.filter()
+	m.draw()
 }
 
 func (m *Menu) enter(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
@@ -182,6 +186,7 @@ func (m *Menu) connectEvents() error {
 		{m.down, "control-s"},
 		{m.backspace, "BackSpace"},
 		{m.escape, "Escape"},
+		{m.escape, "control-g"},
 		{m.enter, "Return"},
 		{m.enter, "KP_Enter"},
 	} {
@@ -201,14 +206,17 @@ func (m *Menu) connectEvents() error {
 	return nil
 }
 
+// GCs implements draw.Drawable.
 func (m *Menu) GCs() draw.GCs {
 	return m.gcs
 }
 
+// Win implements draw.Drawable.
 func (m *Menu) Win() xproto.Window {
 	return m.win.Id
 }
 
+// X implements draw.Drawable.
 func (m *Menu) X() *xgbutil.XUtil {
 	return m.xu
 }
