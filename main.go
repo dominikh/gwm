@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/BurntSushi/xgb/shape"
 	"github.com/BurntSushi/xgb/xproto"
 	"github.com/BurntSushi/xgbutil"
 	"github.com/BurntSushi/xgbutil/ewmh"
@@ -738,25 +739,72 @@ func (win *Window) FillSelect() {
 		return
 	}
 
-	cb := func(ev xevent.ButtonPressEvent) {
-		win.PushLayout()
+	win.PushLayout()
+
+	ov, err := xwindow.Generate(win.wm.X)
+	if err != nil {
+		log.Println("couldn't create overlay:", err)
+		mousebind.UngrabPointer(win.wm.X)
+		return
+	}
+	if err := ov.CreateChecked(win.wm.Root.Id, 0, 0, 1, 1, 0); err != nil {
+		log.Println("couldn't create overlay:", err)
+		mousebind.UngrabPointer(win.wm.X)
+		return
+	}
+	xproto.ConfigureWindow(win.wm.X.Conn(), ov.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(0)})
+
+	cbClick := func(ev xevent.ButtonPressEvent) {
 		win.Layout.X = int(ev.RootX)
 		win.Layout.Y = int(ev.RootY)
 		win.Layout.Width = 1
 		win.Layout.Height = 1
 		win.fill()
+		ov.Destroy()
 	}
 
 	fn := mousebind.ButtonPressFun(func(xu *xgbutil.XUtil, event xevent.ButtonPressEvent) {
 		mousebind.DetachPress(win.wm.X, win.wm.Root.Id)
 		mousebind.UngrabPointer(win.wm.X)
-		cb(event)
+		cbClick(event)
 	})
 	if err := fn.Connect(win.wm.X, win.wm.Root.Id, "1", false, false); err != nil {
 		log.Println("err in connect:", err)
 		mousebind.UngrabPointer(win.wm.X)
 		return
 	}
+
+	ovw := win.wm.NewWindow(ov.Id)
+	ov.Map()
+	cbMove := func(xu *xgbutil.XUtil, ev xevent.MotionNotifyEvent) {
+		const bw = 5
+		win.Layout.X = int(ev.RootX)
+		win.Layout.Y = int(ev.RootY)
+		win.Layout.Width = 1
+		win.Layout.Height = 1
+		x, y, w, h := win.calculateFill()
+		x -= bw
+		y -= bw
+		w += 2 * bw
+		h += 2 * bw
+		ov.MoveResize(x, y, w, h)
+		draw.Fill(ovw, w, h, 0x00FF00)
+		rects := []xproto.Rectangle{
+			{X: 0, Y: 0, Width: 5, Height: uint16(h)},
+			{X: 0, Y: 0, Width: uint16(w), Height: 5},
+			{X: int16(w - bw), Y: 0, Width: 5, Height: uint16(h)},
+			{X: 0, Y: int16(h - bw), Width: uint16(w), Height: 5},
+		}
+		err := shape.RectanglesChecked(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, rects).Check()
+		if err != nil {
+			log.Println("couldn't shape window:", err)
+		}
+		err = shape.RectanglesChecked(win.wm.X.Conn(), shape.SoSet, shape.SkClip, 0, ov.Id, 0, 0, rects).Check()
+		if err != nil {
+			log.Println("couldn't shape window:", err)
+		}
+	}
+	xevent.MotionNotifyFun(cbMove).Connect(win.wm.X, win.wm.Root.Id)
 }
 
 func (win *Window) Fill() {
@@ -764,7 +812,7 @@ func (win *Window) Fill() {
 	win.fill()
 }
 
-func (win *Window) fill() {
+func (win *Window) calculateFill() (x, y, w, h int) {
 	l := win.Layout
 	with := win.wm.VisibleWindows()
 
@@ -772,30 +820,31 @@ func (win *Window) fill() {
 	win.Layout.X = left1
 	win.Layout.Width = right1 - left1
 	_, top1, _, bottom1 := win.collisions(with)
-	w := float64(right1 - left1)
-	h := float64(bottom1 - top1)
-	square1 := math.Min(w, h) / math.Max(w, h)
+	ww := float64(right1 - left1)
+	wh := float64(bottom1 - top1)
+	square1 := math.Min(ww, wh) / math.Max(ww, wh)
 
 	win.Layout = l
 	_, top2, _, bottom2 := win.collisions(with)
 	win.Layout.Y = top2
 	win.Layout.Height = bottom2 - top2
 	left2, _, right2, _ := win.collisions(with)
-	w = float64(right2 - left2)
-	h = float64(bottom2 - top2)
-	square2 := math.Min(w, h) / math.Max(w, h)
+	ww = float64(right2 - left2)
+	wh = float64(bottom2 - top2)
+	square2 := math.Min(ww, wh) / math.Max(ww, wh)
 
 	if square1 > square2 {
-		win.Layout.X = left1
-		win.Layout.Y = top1
-		win.Layout.Width = right1 - left1
-		win.Layout.Height = bottom1 - top1
-	} else {
-		win.Layout.X = left2
-		win.Layout.Y = top2
-		win.Layout.Width = right2 - left2
-		win.Layout.Height = bottom2 - top2
+		return left1, top1, right1 - left1, bottom1 - top1
 	}
+	return left2, top2, right2 - left2, bottom2 - top2
+}
+
+func (win *Window) fill() {
+	x, y, w, h := win.calculateFill()
+	win.Layout.X = x
+	win.Layout.Y = y
+	win.Layout.Width = w
+	win.Layout.Height = h
 	win.moveAndResizeNoReset()
 }
 
@@ -1842,6 +1891,9 @@ func (wm *WM) Init(xu *xgbutil.XUtil) {
 
 	mousebind.Initialize(wm.X)
 	keybind.Initialize(wm.X)
+	if err := shape.Init(wm.X.Conn()); err != nil {
+		log.Fatal("couldn't initialize X Shape Extension")
+	}
 
 	wm.Root = wm.NewWindow(wm.X.RootWin())
 	xproto.ChangeWindowAttributes(wm.X.Conn(), wm.Root.Id, xproto.CwCursor,
