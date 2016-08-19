@@ -726,24 +726,81 @@ func (win *Window) collisions(with []*Window) (left, top, right, bottom int) {
 	return left, top, right, bottom
 }
 
+type Rectangle struct {
+	bw  uint16
+	bc  int
+	wm  *WM
+	win *xwindow.Window
+
+	lastPos [4]int
+}
+
+func (wm *WM) NewRectangle(borderWidth uint16, borderColor int) (*Rectangle, error) {
+	ov, err := xwindow.Generate(wm.X)
+	if err != nil {
+		return nil, err
+	}
+	if err := ov.CreateChecked(wm.Root.Id, 0, 0, 1, 1, xproto.CwBackPixel, uint32(borderColor)); err != nil {
+		// FIXME free id
+		return nil, err
+	}
+	xproto.ConfigureWindow(wm.X.Conn(), ov.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(0)})
+	shape.Rectangles(wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, []xproto.Rectangle{})
+	return &Rectangle{
+		bw:  borderWidth,
+		bc:  borderColor,
+		wm:  wm,
+		win: ov,
+	}, nil
+}
+
+func (r *Rectangle) Id() xproto.Window {
+	return r.win.Id
+}
+
+func (r *Rectangle) Show() {
+	r.win.Map()
+}
+
+func (r *Rectangle) Destroy() {
+	r.win.Destroy()
+}
+
+// log.Println("couldn't create overlay:", err)
+// mousebind.UngrabPointer(win.wm.X)
+
+func (r *Rectangle) MoveAndResize(x, y, w, h int) {
+	vs := [4]int{x, y, w, h}
+	if r.lastPos == vs {
+		return
+	}
+	r.lastPos = vs
+
+	x -= int(r.bw)
+	y -= int(r.bw)
+	w += int(2 * r.bw)
+	h += int(2 * r.bw)
+
+	rects := []xproto.Rectangle{
+		{X: 0, Y: 0, Width: uint16(w), Height: r.bw},
+		{X: int16(uint16(w) - r.bw), Y: 0, Width: r.bw, Height: uint16(h)},
+		{X: 0, Y: int16(uint16(h) - r.bw), Width: uint16(w), Height: r.bw},
+		{X: 0, Y: 0, Width: r.bw, Height: uint16(h)},
+	}
+	shape.Rectangles(r.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, r.win.Id, 0, 0, rects)
+	shape.Rectangles(r.wm.X.Conn(), shape.SoSet, shape.SkClip, 0, r.win.Id, 0, 0, rects)
+	r.win.MoveResize(x, y, w, h)
+}
+
 func (win *Window) FillSelect() {
 	// TODO also grab keyboard to avoid broken states
-
-	ov, err := xwindow.Generate(win.wm.X)
+	r, err := win.wm.NewRectangle(5, 0x00FF00)
 	if err != nil {
-		log.Println("couldn't create overlay:", err)
-		mousebind.UngrabPointer(win.wm.X)
+		log.Println("couldn't create rectangle:", err)
 		return
 	}
-	if err := ov.CreateChecked(win.wm.Root.Id, 0, 0, 1, 1, xproto.CwBackPixel, 0x00FF00); err != nil {
-		log.Println("couldn't create overlay:", err)
-		mousebind.UngrabPointer(win.wm.X)
-		return
-	}
-	xproto.ConfigureWindow(win.wm.X.Conn(), ov.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(0)})
-	ov.Map()
-
-	ok, err := mousebind.GrabPointer(win.wm.X, ov.Id, 0, 0)
+	r.Show()
+	ok, err := mousebind.GrabPointer(win.wm.X, r.Id(), 0, 0)
 	if err != nil {
 		log.Println("err in grab:", err)
 		return
@@ -761,55 +818,34 @@ func (win *Window) FillSelect() {
 		win.Layout.Width = 1
 		win.Layout.Height = 1
 		win.fill()
-		ov.Destroy()
+		r.Destroy()
 	}
 
 	fn := mousebind.ButtonPressFun(func(xu *xgbutil.XUtil, event xevent.ButtonPressEvent) {
-		xevent.Detach(win.wm.X, ov.Id)
-		mousebind.DetachPress(win.wm.X, ov.Id)
+		xevent.Detach(win.wm.X, r.Id())
+		mousebind.DetachPress(win.wm.X, r.Id())
 		mousebind.UngrabPointer(win.wm.X)
 		cbClick(event)
 	})
-	if err := fn.Connect(win.wm.X, ov.Id, "1", false, false); err != nil {
+	if err := fn.Connect(win.wm.X, r.Id(), "1", false, false); err != nil {
 		log.Println("err in connect:", err)
 		mousebind.UngrabPointer(win.wm.X)
 		return
 	}
 
-	shape.Rectangles(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, []xproto.Rectangle{})
-	var lastX, lastY, lastW, lastH int
 	t := time.Now()
 	cbMove := func(xu *xgbutil.XUtil, ev xevent.MotionNotifyEvent) {
 		if time.Since(t) < 10*time.Millisecond {
 			return
 		}
-		defer func() { t = time.Now() }()
-		const bw = 5
+		t = time.Now()
 		win.Layout.X = int(ev.RootX)
 		win.Layout.Y = int(ev.RootY)
 		win.Layout.Width = 1
 		win.Layout.Height = 1
-		x, y, w, h := win.calculateFill()
-		x -= bw
-		y -= bw
-		w += 2 * bw
-		h += 2 * bw
-
-		if lastX == x && lastY == y && lastW == w && lastH == h {
-			return
-		}
-		lastX, lastY, lastW, lastH = x, y, w, h
-		rects := []xproto.Rectangle{
-			{X: 0, Y: 0, Width: uint16(w), Height: bw},
-			{X: int16(w - bw), Y: 0, Width: bw, Height: uint16(h)},
-			{X: 0, Y: int16(h - bw), Width: uint16(w), Height: bw},
-			{X: 0, Y: 0, Width: bw, Height: uint16(h)},
-		}
-		shape.Rectangles(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, rects)
-		shape.Rectangles(win.wm.X.Conn(), shape.SoSet, shape.SkClip, 0, ov.Id, 0, 0, rects)
-		ov.MoveResize(x, y, w, h)
+		r.MoveAndResize(win.calculateFill())
 	}
-	xevent.MotionNotifyFun(cbMove).Connect(win.wm.X, ov.Id)
+	xevent.MotionNotifyFun(cbMove).Connect(win.wm.X, r.Id())
 }
 
 func (win *Window) Fill() {
