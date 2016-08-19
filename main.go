@@ -780,7 +780,12 @@ func (win *Window) FillSelect() {
 	}
 	ov.Map()
 	var lastX, lastY, lastW, lastH int
+	t := time.Now()
 	cbMove := func(xu *xgbutil.XUtil, ev xevent.MotionNotifyEvent) {
+		if time.Since(t) < 10*time.Millisecond {
+			return
+		}
+		defer func() { t = time.Now() }()
 		const bw = 5
 		win.Layout.X = int(ev.RootX)
 		win.Layout.Y = int(ev.RootY)
