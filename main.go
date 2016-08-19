@@ -729,18 +729,6 @@ func (win *Window) collisions(with []*Window) (left, top, right, bottom int) {
 func (win *Window) FillSelect() {
 	// TODO also grab keyboard to avoid broken states
 
-	ok, err := mousebind.GrabPointer(win.wm.X, win.wm.Root.Id, 0, 0)
-	if err != nil {
-		log.Println("err in grab:", err)
-		return
-	}
-	if !ok {
-		log.Println("couldn't grab pointer")
-		return
-	}
-
-	win.PushLayout()
-
 	ov, err := xwindow.Generate(win.wm.X)
 	if err != nil {
 		log.Println("couldn't create overlay:", err)
@@ -753,6 +741,19 @@ func (win *Window) FillSelect() {
 		return
 	}
 	xproto.ConfigureWindow(win.wm.X.Conn(), ov.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(0)})
+	ov.Map()
+
+	ok, err := mousebind.GrabPointer(win.wm.X, ov.Id, 0, 0)
+	if err != nil {
+		log.Println("err in grab:", err)
+		return
+	}
+	if !ok {
+		log.Println("couldn't grab pointer")
+		return
+	}
+
+	win.PushLayout()
 
 	cbClick := func(ev xevent.ButtonPressEvent) {
 		win.Layout.X = int(ev.RootX)
@@ -764,18 +765,18 @@ func (win *Window) FillSelect() {
 	}
 
 	fn := mousebind.ButtonPressFun(func(xu *xgbutil.XUtil, event xevent.ButtonPressEvent) {
-		mousebind.DetachPress(win.wm.X, win.wm.Root.Id)
+		xevent.Detach(win.wm.X, ov.Id)
+		mousebind.DetachPress(win.wm.X, ov.Id)
 		mousebind.UngrabPointer(win.wm.X)
 		cbClick(event)
 	})
-	if err := fn.Connect(win.wm.X, win.wm.Root.Id, "1", false, false); err != nil {
+	if err := fn.Connect(win.wm.X, ov.Id, "1", false, false); err != nil {
 		log.Println("err in connect:", err)
 		mousebind.UngrabPointer(win.wm.X)
 		return
 	}
 
 	shape.Rectangles(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, []xproto.Rectangle{})
-	ov.Map()
 	var lastX, lastY, lastW, lastH int
 	t := time.Now()
 	cbMove := func(xu *xgbutil.XUtil, ev xevent.MotionNotifyEvent) {
@@ -808,7 +809,7 @@ func (win *Window) FillSelect() {
 		shape.Rectangles(win.wm.X.Conn(), shape.SoSet, shape.SkClip, 0, ov.Id, 0, 0, rects)
 		ov.MoveResize(x, y, w, h)
 	}
-	xevent.MotionNotifyFun(cbMove).Connect(win.wm.X, win.wm.Root.Id)
+	xevent.MotionNotifyFun(cbMove).Connect(win.wm.X, ov.Id)
 }
 
 func (win *Window) Fill() {
