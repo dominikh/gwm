@@ -787,9 +787,11 @@ func (r *Rectangle) MoveAndResize(x, y, w, h int) {
 		{X: 0, Y: int16(uint16(h) - r.bw), Width: uint16(w), Height: r.bw},
 		{X: 0, Y: 0, Width: r.bw, Height: uint16(h)},
 	}
+	shape.Rectangles(r.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, r.win.Id, 0, 0, []xproto.Rectangle{})
+	shape.Rectangles(r.wm.X.Conn(), shape.SoSet, shape.SkClip, 0, r.win.Id, 0, 0, []xproto.Rectangle{})
+	r.win.MoveResize(x, y, w, h)
 	shape.Rectangles(r.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, r.win.Id, 0, 0, rects)
 	shape.Rectangles(r.wm.X.Conn(), shape.SoSet, shape.SkClip, 0, r.win.Id, 0, 0, rects)
-	r.win.MoveResize(x, y, w, h)
 }
 
 func (win *Window) FillSelect() {
