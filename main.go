@@ -774,7 +774,6 @@ func (win *Window) FillSelect() {
 		return
 	}
 
-	ov.MoveResize(0, 0, 3840, 2160)
 	err = shape.RectanglesChecked(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, []xproto.Rectangle{}).Check()
 	if err != nil {
 		log.Println("couldn't shape window:", err)
@@ -792,10 +791,10 @@ func (win *Window) FillSelect() {
 		w += 2 * bw
 		h += 2 * bw
 		rects := []xproto.Rectangle{
-			{X: int16(x), Y: int16(y), Width: uint16(w), Height: bw},
-			{X: int16(x + w - bw), Y: int16(y), Width: bw, Height: uint16(h)},
-			{X: int16(x), Y: int16(y + h - bw), Width: uint16(w), Height: bw},
-			{X: int16(x), Y: int16(y), Width: bw, Height: uint16(h)},
+			{X: 0, Y: 0, Width: uint16(w), Height: bw},
+			{X: int16(w - bw), Y: 0, Width: bw, Height: uint16(h)},
+			{X: 0, Y: int16(h - bw), Width: uint16(w), Height: bw},
+			{X: 0, Y: 0, Width: bw, Height: uint16(h)},
 		}
 		err := shape.RectanglesChecked(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, rects).Check()
 		if err != nil {
@@ -805,6 +804,7 @@ func (win *Window) FillSelect() {
 		if err != nil {
 			log.Println("couldn't shape window:", err)
 		}
+		ov.MoveResize(x, y, w, h)
 	}
 	xevent.MotionNotifyFun(cbMove).Connect(win.wm.X, win.wm.Root.Id)
 }
