@@ -747,7 +747,7 @@ func (win *Window) FillSelect() {
 		mousebind.UngrabPointer(win.wm.X)
 		return
 	}
-	if err := ov.CreateChecked(win.wm.Root.Id, 0, 0, 1, 1, 0); err != nil {
+	if err := ov.CreateChecked(win.wm.Root.Id, 0, 0, 1, 1, xproto.CwBackPixel, 0x00FF00); err != nil {
 		log.Println("couldn't create overlay:", err)
 		mousebind.UngrabPointer(win.wm.X)
 		return
@@ -774,7 +774,11 @@ func (win *Window) FillSelect() {
 		return
 	}
 
-	ovw := win.wm.NewWindow(ov.Id)
+	ov.MoveResize(0, 0, 3840, 2160)
+	err = shape.RectanglesChecked(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, []xproto.Rectangle{}).Check()
+	if err != nil {
+		log.Println("couldn't shape window:", err)
+	}
 	ov.Map()
 	cbMove := func(xu *xgbutil.XUtil, ev xevent.MotionNotifyEvent) {
 		const bw = 5
@@ -787,13 +791,11 @@ func (win *Window) FillSelect() {
 		y -= bw
 		w += 2 * bw
 		h += 2 * bw
-		ov.MoveResize(x, y, w, h)
-		draw.Fill(ovw, w, h, 0x00FF00)
 		rects := []xproto.Rectangle{
-			{X: 0, Y: 0, Width: 5, Height: uint16(h)},
-			{X: 0, Y: 0, Width: uint16(w), Height: 5},
-			{X: int16(w - bw), Y: 0, Width: 5, Height: uint16(h)},
-			{X: 0, Y: int16(h - bw), Width: uint16(w), Height: 5},
+			{X: int16(x), Y: int16(y), Width: uint16(w), Height: bw},
+			{X: int16(x + w - bw), Y: int16(y), Width: bw, Height: uint16(h)},
+			{X: int16(x), Y: int16(y + h - bw), Width: uint16(w), Height: bw},
+			{X: int16(x), Y: int16(y), Width: bw, Height: uint16(h)},
 		}
 		err := shape.RectanglesChecked(win.wm.X.Conn(), shape.SoSet, shape.SkBounding, 0, ov.Id, 0, 0, rects).Check()
 		if err != nil {
