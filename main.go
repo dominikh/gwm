@@ -779,6 +779,7 @@ func (win *Window) FillSelect() {
 		log.Println("couldn't shape window:", err)
 	}
 	ov.Map()
+	var lastX, lastY, lastW, lastH int
 	cbMove := func(xu *xgbutil.XUtil, ev xevent.MotionNotifyEvent) {
 		const bw = 5
 		win.Layout.X = int(ev.RootX)
@@ -790,6 +791,11 @@ func (win *Window) FillSelect() {
 		y -= bw
 		w += 2 * bw
 		h += 2 * bw
+
+		if lastX == x && lastY == y && lastW == w && lastH == h {
+			return
+		}
+		lastX, lastY, lastW, lastH = x, y, w, h
 		rects := []xproto.Rectangle{
 			{X: 0, Y: 0, Width: uint16(w), Height: bw},
 			{X: int16(w - bw), Y: 0, Width: bw, Height: uint16(h)},
