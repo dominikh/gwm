@@ -741,7 +741,7 @@ func (wm *WM) NewRectangle(borderWidth uint16, borderColor int) (*Rectangle, err
 		return nil, err
 	}
 	if err := ov.CreateChecked(wm.Root.Id, 0, 0, 1, 1, xproto.CwBackPixel, uint32(borderColor)); err != nil {
-		// FIXME free id
+		ov.Destroy()
 		return nil, err
 	}
 	xproto.ConfigureWindow(wm.X.Conn(), ov.Id, xproto.ConfigWindowBorderWidth, []uint32{uint32(0)})
