@@ -766,9 +766,6 @@ func (r *Rectangle) Destroy() {
 	r.win.Destroy()
 }
 
-// log.Println("couldn't create overlay:", err)
-// mousebind.UngrabPointer(win.wm.X)
-
 func (r *Rectangle) MoveAndResize(x, y, w, h int) {
 	vs := [4]int{x, y, w, h}
 	if r.lastPos == vs {
@@ -1887,11 +1884,7 @@ func (wm *WM) Color(name string) int {
 	}
 
 	if name[0] == '#' {
-		i, err := strconv.ParseInt(name[1:], 16, 32)
-		// XXX Go issue 7105
-		if err != nil {
-			i = 0
-		}
+		i, _ := strconv.ParseInt(name[1:], 16, 32)
 		wm.colors[name] = int(i)
 		return int(i)
 	}
@@ -1899,7 +1892,6 @@ func (wm *WM) Color(name string) int {
 	reply, err := xproto.LookupColor(wm.X.Conn(), wm.X.Screen().DefaultColormap, uint16(len(name)), name).Reply()
 	should(err)
 	color := int(reply.ExactRed/256)<<16 | int(reply.ExactGreen/256)<<8 | int(reply.ExactBlue/256)
-	// XXX Go issue 7105
 	if err != nil {
 		color = 0
 	}
@@ -2181,7 +2173,6 @@ var commands = map[string]func(wm *WM){
 }
 
 // TODO watch for wm_normal_hints changes
-// TODO honor aspect ratio when resizing
 // TODO remove wm_state when withdrawing
 // TODO unset _NET_DESKTOP_NAMES
 // TODO set allowed actions
