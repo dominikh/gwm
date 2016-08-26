@@ -7,6 +7,21 @@ type Region struct {
 	Height int
 }
 
+func round(n int) int {
+	if n&(n-1) == 0 {
+		return n
+	}
+	v := uint64(n)
+	v |= v >> 1
+	v |= v >> 2
+	v |= v >> 4
+	v |= v >> 8
+	v |= v >> 16
+	v |= v >> 32
+	v++
+	return int(v)
+}
+
 func (r Region) Overlaps(other Region) (ret bool) {
 	x1, y1 := r.X, r.Y
 	x2, y2 := r.X+r.Width, r.Y+r.Height
@@ -28,8 +43,8 @@ type Node struct {
 func New(width, height int) *Node {
 	return &Node{
 		Region: Region{
-			Width:  width,
-			Height: height,
+			Width:  round(width),
+			Height: round(height),
 		},
 	}
 }
