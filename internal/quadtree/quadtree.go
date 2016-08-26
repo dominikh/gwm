@@ -41,6 +41,11 @@ type Node struct {
 }
 
 func New(width, height int) *Node {
+	if width > height {
+		height = width
+	} else {
+		width = height
+	}
 	return &Node{
 		Region: Region{
 			Width:  round(width),
