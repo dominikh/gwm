@@ -42,6 +42,7 @@ import (
 
 	"honnef.co/go/gwm/config"
 	"honnef.co/go/gwm/draw"
+	"honnef.co/go/gwm/internal/quadtree"
 	"honnef.co/go/gwm/menu"
 )
 
@@ -666,6 +667,32 @@ func (wm *WM) MappedWindows() []*Window {
 	return wm.GetWindows(icccm.StateNormal)
 }
 
+func (wm *WM) VisibleWindows() []*Window {
+	wins := wm.MappedWindows()
+	q := quadtree.New(3840) // XXX get screen size
+	for _, win := range wins {
+		q.SetRegion(quadtree.Region{
+			X:      win.Layout.X,
+			Y:      win.Layout.Y,
+			Width:  win.Layout.Width,
+			Height: win.Layout.Height,
+		}, int(win.Id))
+	}
+
+	var out []*Window
+	for _, win := range wins {
+		if q.HasValue(quadtree.Region{
+			X:      win.Layout.X,
+			Y:      win.Layout.Y,
+			Width:  win.Layout.Width,
+			Height: win.Layout.Height,
+		}, int(win.Id)) {
+			out = append(out, win)
+		}
+	}
+	return out
+}
+
 func (win *Window) collisions(with []*Window) (left, top, right, bottom int) {
 	// FIXME what happens with windows that span screens?
 	screen := win.Screen()
@@ -845,12 +872,13 @@ func (win *Window) FillSelect() {
 		log.Println("couldn't register keybind:", err)
 	}
 
+	wins := win.wm.VisibleWindows()
 	calculateFill := func(x, y int) {
 		win.Layout.X = x
 		win.Layout.Y = y
 		win.Layout.Width = 1
 		win.Layout.Height = 1
-		r.MoveAndResize(win.calculateFill())
+		r.MoveAndResize(win.calculateFill(wins))
 	}
 
 	t := time.Now()
@@ -871,23 +899,21 @@ func (win *Window) Fill() {
 	win.fill()
 }
 
-func (win *Window) calculateFill() (x, y, w, h int) {
+func (win *Window) calculateFill(wins []*Window) (x, y, w, h int) {
 	l := win.Layout
-	with := win.wm.MappedWindows()
-
-	left1, _, right1, _ := win.collisions(with)
+	left1, _, right1, _ := win.collisions(wins)
 	win.Layout.X = left1
 	win.Layout.Width = right1 - left1
-	_, top1, _, bottom1 := win.collisions(with)
+	_, top1, _, bottom1 := win.collisions(wins)
 	ww := float64(right1 - left1)
 	wh := float64(bottom1 - top1)
 	square1 := math.Min(ww, wh) / math.Max(ww, wh)
 
 	win.Layout = l
-	_, top2, _, bottom2 := win.collisions(with)
+	_, top2, _, bottom2 := win.collisions(wins)
 	win.Layout.Y = top2
 	win.Layout.Height = bottom2 - top2
-	left2, _, right2, _ := win.collisions(with)
+	left2, _, right2, _ := win.collisions(wins)
 	ww = float64(right2 - left2)
 	wh = float64(bottom2 - top2)
 	square2 := math.Min(ww, wh) / math.Max(ww, wh)
@@ -899,7 +925,8 @@ func (win *Window) calculateFill() (x, y, w, h int) {
 }
 
 func (win *Window) fill() {
-	x, y, w, h := win.calculateFill()
+	wins := win.wm.VisibleWindows()
+	x, y, w, h := win.calculateFill(wins)
 	win.Layout.X = x
 	win.Layout.Y = y
 	win.Layout.Width = w

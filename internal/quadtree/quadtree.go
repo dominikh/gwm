@@ -84,6 +84,19 @@ func (n *Node) Get(x, y int) int {
 	return n.quadrant(x, y).Value
 }
 
+func (n *Node) HasValue(r Region, value int) bool {
+	if !n.isSplit {
+		return n.Value == value
+	}
+	b := false
+	for i := range n.children {
+		if n.children[i].overlaps(r) {
+			b = b || n.children[i].HasValue(r, value)
+		}
+	}
+	return b
+}
+
 func (n *Node) split() {
 	size := n.Size / 2
 	n.children = make([]Node, 4)
