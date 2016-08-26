@@ -845,18 +845,24 @@ func (win *Window) FillSelect() {
 		log.Println("couldn't register keybind:", err)
 	}
 
+	calculateFill := func(x, y int) {
+		win.Layout.X = x
+		win.Layout.Y = y
+		win.Layout.Width = 1
+		win.Layout.Height = 1
+		r.MoveAndResize(win.calculateFill())
+	}
+
 	t := time.Now()
 	cbMove := func(xu *xgbutil.XUtil, ev xevent.MotionNotifyEvent) {
 		if time.Since(t) < 10*time.Millisecond {
 			return
 		}
 		t = time.Now()
-		win.Layout.X = int(ev.RootX)
-		win.Layout.Y = int(ev.RootY)
-		win.Layout.Width = 1
-		win.Layout.Height = 1
-		r.MoveAndResize(win.calculateFill())
+		calculateFill(int(ev.RootX), int(ev.RootY))
 	}
+	pos := win.wm.PointerPos()
+	calculateFill(pos.X, pos.Y)
 	xevent.MotionNotifyFun(cbMove).Connect(win.wm.X, r.Id())
 }
 
