@@ -302,7 +302,7 @@ func (win *Window) SetBorderWidth(width int) {
 
 func (win *Window) Raise() {
 	windows := make(map[Layer][]*Window)
-	for _, ow := range win.wm.GetWindows(icccm.StateNormal) {
+	for _, ow := range win.wm.MappedWindows() {
 		if ow.Id == win.Id || ow.Id == win.wm.Root.Id {
 			continue
 		}
@@ -322,7 +322,7 @@ func (win *Window) Raise() {
 func (win *Window) Lower() {
 	windows := make(map[Layer][]*Window)
 	windows[win.Layer] = []*Window{win}
-	for _, ow := range win.wm.GetWindows(icccm.StateNormal) {
+	for _, ow := range win.wm.MappedWindows() {
 		if ow.Id == win.Id || ow.Id == win.wm.Root.Id {
 			continue
 		}
@@ -1375,7 +1375,7 @@ func (win *Window) SetLayer(layer Layer) {
 	win.Layer = layer
 	win.updateWmState()
 	windows := make(map[Layer][]*Window)
-	for _, ow := range win.wm.GetWindows(icccm.StateNormal) {
+	for _, ow := range win.wm.MappedWindows() {
 		windows[ow.Layer] = append(windows[ow.Layer], ow)
 	}
 
@@ -1733,7 +1733,7 @@ func (wm *WM) WarpPointerRel(dx, dy int) {
 }
 
 func (wm *WM) windowSearchMenu() {
-	wins := wm.GetWindows(icccm.StateNormal) // FIXME hidden windows
+	wins := wm.MappedWindows() // FIXME hidden windows
 	var entries []menu.Entry
 	for _, win := range wins {
 		// ! currently focused
