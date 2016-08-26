@@ -792,7 +792,6 @@ func (r *Rectangle) MoveAndResize(x, y, w, h int) {
 }
 
 func (win *Window) FillSelect() {
-	// TODO also grab keyboard to avoid broken states
 	r, err := win.wm.NewRectangle(5, 0x00FF00)
 	if err != nil {
 		log.Println("couldn't create rectangle:", err)
@@ -817,19 +816,33 @@ func (win *Window) FillSelect() {
 		win.Layout.Width = 1
 		win.Layout.Height = 1
 		win.fill()
-		r.Destroy()
 	}
 
-	fn := mousebind.ButtonPressFun(func(xu *xgbutil.XUtil, event xevent.ButtonPressEvent) {
+	if err := keybind.GrabKeyboard(win.wm.X, r.Id()); err != nil {
+		log.Println("couldn't grab keyboard:", err)
+	}
+
+	cleanup := func() {
 		xevent.Detach(win.wm.X, r.Id())
 		mousebind.DetachPress(win.wm.X, r.Id())
 		mousebind.UngrabPointer(win.wm.X)
+		keybind.UngrabKeyboard(win.wm.X)
+		r.Destroy()
+	}
+	fn := mousebind.ButtonPressFun(func(xu *xgbutil.XUtil, event xevent.ButtonPressEvent) {
+		cleanup()
 		cbClick(event)
 	})
 	if err := fn.Connect(win.wm.X, r.Id(), "1", false, false); err != nil {
 		log.Println("err in connect:", err)
 		mousebind.UngrabPointer(win.wm.X)
 		return
+	}
+	fn2 := keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
+		cleanup()
+	})
+	if err := fn2.Connect(win.wm.X, r.win.Id, "Escape", true); err != nil {
+		log.Println("couldn't register keybind:", err)
 	}
 
 	t := time.Now()
@@ -2023,7 +2036,7 @@ func main() {
 	xu, err := xgbutil.NewConn()
 	must(err)
 
-	laddr, err := net.ResolveUnixAddr("unix", "/tmp/gwm-0")
+	laddr, err := net.ResolveUnixAddr("unix", "/tmp/gwm-1")
 	if err != nil {
 		panic(err)
 	}
