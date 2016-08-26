@@ -75,10 +75,10 @@ func (n *Node) quadrant(x, y int) *Node {
 		return n
 	}
 	quadrant := 0
-	if x > n.Width/2 {
+	if x >= n.X+n.Width/2 {
 		quadrant++
 	}
-	if y > n.Height/2 {
+	if y >= n.Y+n.Height/2 {
 		quadrant += 2
 	}
 	return n.children[quadrant].quadrant(x, y)
