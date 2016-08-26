@@ -22,7 +22,7 @@ func round(n int) int {
 	return int(v)
 }
 
-func (r Region) Overlaps(other Region) (ret bool) {
+func (r Region) overlaps(other Region) (ret bool) {
 	x1, y1 := r.X, r.Y
 	x2, y2 := r.X+r.Width, r.Y+r.Height
 
@@ -64,7 +64,7 @@ func (n *Node) Set(r Region, value int) {
 		n.split()
 	}
 	for i := range n.children {
-		if n.children[i].Overlaps(r) {
+		if n.children[i].overlaps(r) {
 			n.children[i].Set(r, value)
 		}
 	}
