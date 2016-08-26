@@ -22,9 +22,25 @@ func round(n int) int {
 	return int(v)
 }
 
-func (r Region) overlaps(other Region) (ret bool) {
-	x1, y1 := r.X, r.Y
-	x2, y2 := r.X+r.Width, r.Y+r.Height
+type Node struct {
+	X     int
+	Y     int
+	Size  int
+	Value int
+
+	children []Node
+	isSplit  bool
+}
+
+func New(size int) *Node {
+	return &Node{
+		Size: round(size),
+	}
+}
+
+func (n *Node) overlaps(other Region) (ret bool) {
+	x1, y1 := n.X, n.Y
+	x2, y2 := n.X+n.Size, n.Y+n.Size
 
 	ox1, oy1 := other.X, other.Y
 	ox2, oy2 := other.X+other.Width, other.Y+other.Height
@@ -32,32 +48,10 @@ func (r Region) overlaps(other Region) (ret bool) {
 	return x1 < ox2 && x2 > ox1 && y1 < oy2 && y2 > oy1
 }
 
-type Node struct {
-	Region
-	Value int
-
-	children []Node
-	isSplit  bool
-}
-
-func New(width, height int) *Node {
-	if width > height {
-		height = width
-	} else {
-		width = height
-	}
-	return &Node{
-		Region: Region{
-			Width:  round(width),
-			Height: round(height),
-		},
-	}
-}
-
 func (n *Node) Set(r Region, value int) {
 	if !n.isSplit {
 		if n.X >= r.X && n.Y >= r.Y &&
-			n.X+n.Width <= r.X+r.Width && n.Y+n.Height <= r.Y+r.Height {
+			n.X+n.Size <= r.X+r.Width && n.Y+n.Size <= r.Y+r.Height {
 			n.Value = value
 			return
 		}
@@ -75,10 +69,10 @@ func (n *Node) quadrant(x, y int) *Node {
 		return n
 	}
 	quadrant := 0
-	if x >= n.X+n.Width/2 {
+	if x >= n.X+n.Size/2 {
 		quadrant++
 	}
-	if y >= n.Y+n.Height/2 {
+	if y >= n.Y+n.Size/2 {
 		quadrant += 2
 	}
 	return n.children[quadrant].quadrant(x, y)
@@ -89,31 +83,31 @@ func (n *Node) Get(x, y int) int {
 }
 
 func (n *Node) split() {
-	width, height := n.Width/2, n.Height/2
+	size := n.Size / 2
 	n.children = make([]Node, 4)
-	n.children[0] = Node{Region: Region{
-		X:      n.X,
-		Y:      n.Y,
-		Width:  width,
-		Height: height,
-	}, Value: n.Value}
-	n.children[1] = Node{Region: Region{
-		X:      n.X + width,
-		Y:      n.Y,
-		Width:  width,
-		Height: height,
-	}, Value: n.Value}
-	n.children[2] = Node{Region: Region{
-		X:      n.X,
-		Y:      n.Y + height,
-		Width:  width,
-		Height: height,
-	}, Value: n.Value}
-	n.children[3] = Node{Region: Region{
-		X:      n.X + width,
-		Y:      n.Y + height,
-		Width:  width,
-		Height: height,
-	}, Value: n.Value}
+	n.children[0] = Node{
+		X:     n.X,
+		Y:     n.Y,
+		Size:  size,
+		Value: n.Value,
+	}
+	n.children[1] = Node{
+		X:     n.X + size,
+		Y:     n.Y,
+		Size:  size,
+		Value: n.Value,
+	}
+	n.children[2] = Node{
+		X:     n.X,
+		Y:     n.Y + size,
+		Size:  size,
+		Value: n.Value,
+	}
+	n.children[3] = Node{
+		X:     n.X + size,
+		Y:     n.Y + size,
+		Size:  size,
+		Value: n.Value,
+	}
 	n.isSplit = true
 }

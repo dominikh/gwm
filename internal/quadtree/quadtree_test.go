@@ -19,7 +19,7 @@ func TestRound(t *testing.T) {
 }
 
 func TestTree(t *testing.T) {
-	q := New(1920, 1080)
+	q := New(1920)
 	q.Set(Region{9, 9, 9, 9}, 70)
 	q.Set(Region{360, 360, 360, 360}, 123)
 	q.Set(Region{300, 300, 360, 360}, 50)
@@ -43,7 +43,7 @@ func TestTree(t *testing.T) {
 
 func BenchmarkConstruction(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		q := New(3840, 2160)
+		q := New(3840)
 		q.Set(Region{0, 0, 3488, 1638}, int(48234500))
 		q.Set(Region{1413, 952, 712, 905}, int(37748740))
 		q.Set(Region{1600, 751, 2088, 1301}, int(20971521))
@@ -64,7 +64,7 @@ func BenchmarkConstruction(b *testing.B) {
 }
 
 func BenchmarkRetrieve(b *testing.B) {
-	q := New(3840, 2160)
+	q := New(3840)
 	q.Set(Region{0, 0, 3488, 1638}, int(48234500))
 	q.Set(Region{1413, 952, 712, 905}, int(37748740))
 	q.Set(Region{1600, 751, 2088, 1301}, int(20971521))

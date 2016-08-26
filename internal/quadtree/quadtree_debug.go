@@ -11,7 +11,7 @@ import (
 func (n *Node) Render() image.Image {
 	r := image.Rectangle{
 		Min: image.Pt(0, 0),
-		Max: image.Pt(n.Width, n.Height),
+		Max: image.Pt(n.Size, n.Size),
 	}
 	img := image.NewGray(r)
 	draw.Draw(img, r, &image.Uniform{color.Gray{Y: 255}}, image.ZP, draw.Src)
@@ -24,18 +24,18 @@ func (n *Node) render(img draw.Image) {
 		if n.Value > 0 {
 			r := image.Rectangle{
 				Min: image.Pt(n.X, n.Y),
-				Max: image.Pt(n.X+n.Width, n.Y+n.Height),
+				Max: image.Pt(n.X+n.Size, n.Y+n.Size),
 			}
 			draw.Draw(img, r, &image.Uniform{color.Gray{uint8(n.Value)}}, image.ZP, draw.Src)
 		}
 	}
 	r1 := image.Rectangle{
 		Min: image.Pt(n.X, n.Y),
-		Max: image.Pt(n.X+n.Width, n.Y+1),
+		Max: image.Pt(n.X+n.Size, n.Y+1),
 	}
 	r2 := image.Rectangle{
 		Min: image.Pt(n.X, n.Y),
-		Max: image.Pt(n.X+1, n.Y+n.Height),
+		Max: image.Pt(n.X+1, n.Y+n.Size),
 	}
 	draw.Draw(img, r1, &image.Uniform{color.Gray{uint8(0)}}, image.ZP, draw.Src)
 	draw.Draw(img, r2, &image.Uniform{color.Gray{uint8(0)}}, image.ZP, draw.Src)
