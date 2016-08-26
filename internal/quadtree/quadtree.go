@@ -48,7 +48,7 @@ func (n *Node) overlaps(other Region) (ret bool) {
 	return x1 < ox2 && x2 > ox1 && y1 < oy2 && y2 > oy1
 }
 
-func (n *Node) Set(r Region, value int) {
+func (n *Node) SetRegion(r Region, value int) {
 	if !n.isSplit {
 		if n.X >= r.X && n.Y >= r.Y &&
 			n.X+n.Size <= r.X+r.Width && n.Y+n.Size <= r.Y+r.Height {
@@ -59,12 +59,14 @@ func (n *Node) Set(r Region, value int) {
 	}
 	for i := range n.children {
 		if n.children[i].overlaps(r) {
-			n.children[i].Set(r, value)
+			n.children[i].SetRegion(r, value)
 		}
 	}
 }
 
 func (n *Node) quadrant(x, y int) *Node {
+	// TODO(dh): Using a loop instead of recursion can speed this up
+	// by a factor of two.
 	if !n.isSplit {
 		return n
 	}
