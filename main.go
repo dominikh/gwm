@@ -862,7 +862,7 @@ func (win *Window) FillSelect() {
 	})
 	if err := fn.Connect(win.wm.X, r.Id(), "1", false, false); err != nil {
 		log.Println("err in connect:", err)
-		mousebind.UngrabPointer(win.wm.X)
+		cleanup()
 		return
 	}
 	fn2 := keybind.KeyPressFun(func(xu *xgbutil.XUtil, ev xevent.KeyPressEvent) {
@@ -874,11 +874,13 @@ func (win *Window) FillSelect() {
 
 	wins := win.wm.VisibleWindows()
 	calculateFill := func(x, y int) {
+		l := win.Layout
 		win.Layout.X = x
 		win.Layout.Y = y
 		win.Layout.Width = 1
 		win.Layout.Height = 1
 		r.MoveAndResize(win.calculateFill(wins))
+		win.Layout = l
 	}
 
 	t := time.Now()
@@ -901,6 +903,8 @@ func (win *Window) Fill() {
 
 func (win *Window) calculateFill(wins []*Window) (x, y, w, h int) {
 	l := win.Layout
+	defer func() { win.Layout = l }()
+
 	left1, _, right1, _ := win.collisions(wins)
 	win.Layout.X = left1
 	win.Layout.Width = right1 - left1
